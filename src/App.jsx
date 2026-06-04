@@ -1,0 +1,2957 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  Cell,
+  CartesianGrid,
+  Pie,
+  PieChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  ArrowLeft,
+  Banknote,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  IndianRupee,
+  Landmark,
+  Loader2,
+  Plus,
+  PiggyBank,
+  RefreshCw,
+  Repeat,
+  Send,
+  Sparkles,
+  Target,
+  Trash2,
+  TrendingUp,
+  WalletCards,
+  X,
+} from "lucide-react";
+
+const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
+
+const DEFAULT_CATEGORIES = [
+  "Daily Essentials",
+  "Life Enjoyment",
+  "Commuting",
+  "Home & Utilities",
+  "Health & Fitness",
+  "Personal Care",
+  "Subscriptions",
+  "Investments",
+];
+
+const DEFAULT_INCOME_SOURCES = [
+  "Salary",
+  "Freelance",
+  "Stock Profit",
+  "Mutual Fund Gain",
+  "Interest",
+  "Refund",
+  "Gift",
+  "Other Income",
+];
+
+const ENTRY_TABS = [
+  { id: "expense", label: "Expenses" },
+  { id: "income", label: "Income" },
+  { id: "asset", label: "Assets" },
+];
+
+const PERIOD_TABS = [
+  { id: "weekly", label: "Weekly" },
+  { id: "monthly", label: "Monthly" },
+  { id: "yearly", label: "Yearly" },
+];
+
+const PLANNER_TABS = [
+  { id: "insights", label: "Insights", icon: Sparkles },
+  { id: "review", label: "Review", icon: ClipboardList },
+];
+
+const DEFAULT_ALLOCATION_TARGETS = {
+  needs: 50,
+  wants: 30,
+  savings: 20,
+};
+
+const JOURNAL_SPEND_FILTERS = [
+  { id: "all", label: "All spends" },
+  { id: "0-100", label: "₹0-100", min: 0, max: 100 },
+  { id: "101-1000", label: "₹101-1000", min: 101, max: 1000 },
+  { id: "1000+", label: "₹1000+", min: 1000 },
+];
+
+const NOTE_SUGGESTIONS = [
+  "order from food app",
+  "cab to office",
+  "bedsheet for home",
+  "gym membership",
+  "moisturizer",
+  "netflix subsciption",
+  "Monthly SIP",
+];
+
+const CATEGORY_COLORS = {
+  "Daily Essentials": "#C9B99E",
+  "Life Enjoyment": "#B77954",
+  Commuting: "#9A8C98",
+  "Home & Utilities": "#4A5759",
+  "Health & Fitness": "#E07A5F",
+  "Personal Care": "#D4A373",
+  Subscriptions: "#CA6702",
+  Investments: "#6F8F78",
+};
+
+const BUCKETS = {
+  needs: ["Daily Essentials", "Commuting", "Home & Utilities", "Health & Fitness"],
+  wants: ["Life Enjoyment", "Personal Care", "Subscriptions"],
+  savings: ["Investments"],
+};
+
+const DEFAULT_ACCOUNTS = [
+  { id: "sbi", name: "SBI Account", type: "Bank", balance: 42000 },
+  { id: "hdfc", name: "HDFC Account", type: "Bank", balance: 28500 },
+  { id: "cash", name: "Cash Reserve", type: "Cash", balance: 6800 },
+  { id: "stocks", name: "Stocks", type: "Market", balance: 72500 },
+  { id: "mutualFunds", name: "Mutual Funds", type: "Market", balance: 126000 },
+];
+
+const DEFAULT_BUDGETS = {
+  monthlyTotal: 60000,
+  categories: {
+    "Daily Essentials": 12000,
+    "Life Enjoyment": 8000,
+    Commuting: 4500,
+    "Home & Utilities": 14000,
+    "Health & Fitness": 5000,
+    "Personal Care": 3500,
+    Subscriptions: 2500,
+    Investments: 12000,
+  },
+};
+
+const DEFAULT_RECURRING_RULES = [
+  { id: "rent", name: "Rent", category: "Home & Utilities", amount: 18000, frequency: "monthly", dueDay: 5 },
+  { id: "sip", name: "SIP", category: "Investments", amount: 5000, frequency: "monthly", dueDay: 1 },
+  { id: "phone", name: "Phone bill", category: "Subscriptions", amount: 799, frequency: "monthly", dueDay: 12 },
+  { id: "groceries", name: "Weekly essentials", category: "Daily Essentials", amount: 2500, frequency: "weekly", dueDay: 6 },
+];
+
+const STORAGE_KEYS = {
+  accounts: "life-expenses.accounts",
+  allocationTargets: "life-expenses.allocationTargets",
+  budgetSetupComplete: "life-expenses.budgetSetupComplete",
+  budgets: "life-expenses.budgets",
+  categoryBuckets: "life-expenses.categoryBuckets",
+  expenseCategories: "life-expenses.expenseCategories",
+  recurringRules: "life-expenses.recurringRules",
+};
+
+function getDateInputValue(date = new Date()) {
+  const safeDate = new Date(date);
+  if (Number.isNaN(safeDate.getTime())) return getDateInputValue(new Date());
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const day = String(safeDate.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateFromInputValue(value) {
+  if (!value) return new Date();
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return new Date();
+  const now = new Date();
+  return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+}
+
+const DEMO_TRANSACTIONS = [
+  makeEntry(1280, "Daily Essentials", "expense", "sbi", new Date(2026, 5, 1, 9, 18)),
+  makeEntry(740, "Life Enjoyment", "expense", "hdfc", new Date(2026, 5, 3, 20, 4)),
+  makeEntry(2100, "Investments", "expense", "mutualFunds", new Date(2026, 5, 6, 11, 24)),
+  makeEntry(6500, "Stock Profit", "income", "stocks", new Date(2026, 5, 8, 11, 24)),
+  makeEntry(560, "Commuting", "expense", "sbi", new Date(2026, 5, 10, 8, 2)),
+  makeEntry(1890, "Home & Utilities", "expense", "hdfc", new Date(2026, 5, 16, 14, 35)),
+  makeEntry(460, "Subscriptions", "expense", "sbi", new Date(2026, 5, 23, 7, 58)),
+];
+
+function getBucket(category) {
+  const normalizedCategory = normalizeCategoryName(category);
+  if (BUCKETS.needs.includes(normalizedCategory)) return "Needs";
+  if (BUCKETS.wants.includes(normalizedCategory)) return "Wants";
+  return "Savings";
+}
+
+function normalizeCategoryName(category) {
+  return category === "Food Outside" ? "Life Enjoyment" : category;
+}
+
+function getIsoWeek(date) {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNumber = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNumber);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+}
+
+function getWeekOfMonth(date) {
+  return Math.min(4, Math.ceil(date.getDate() / 7));
+}
+
+function makeEntry(amount, category, direction = "expense", accountId = "sbi", sourceDate = new Date(), note = "") {
+  const date = new Date(sourceDate);
+  const monthNumber = date.getMonth() + 1;
+  const entryDate = date.toISOString().slice(0, 10);
+
+  return {
+    id: `${date.getTime()}-${Math.random().toString(16).slice(2)}`,
+    amount: Number(amount),
+    direction,
+    category,
+    accountId,
+    bucket: direction === "expense" ? getBucket(category) : "Income",
+    timestamp: date.toISOString(),
+    date: entryDate,
+    dayString: date.toLocaleDateString("en-US", { weekday: "short" }),
+    monthString: date.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+    monthNumber,
+    year: date.getFullYear(),
+    weekNumber: getIsoWeek(date),
+    weekOfMonth: getWeekOfMonth(date),
+    note,
+  };
+}
+
+async function apiGetDashboard() {
+  if (!APPS_SCRIPT_URL) return null;
+  const response = await fetch(APPS_SCRIPT_URL, {
+    method: "GET",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Dashboard read failed");
+  return response.json();
+}
+
+async function apiPost(action, payload) {
+  if (!APPS_SCRIPT_URL) return null;
+  const response = await fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  if (!response.ok) throw new Error(`${action} write failed`);
+  return response.json();
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value || 0));
+}
+
+function readStoredValue(key, fallback) {
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredValue(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Local persistence is a convenience layer; the app should keep running if storage is unavailable.
+  }
+}
+
+function makeSlug(name, existingIds = []) {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "item";
+  let id = base;
+  let index = 2;
+  while (existingIds.includes(id)) {
+    id = `${base}-${index}`;
+    index += 1;
+  }
+  return id;
+}
+
+function mergeAccounts(primaryAccounts, fallbackAccounts) {
+  const ids = new Set(primaryAccounts.map((account) => account.id));
+  return [...primaryAccounts, ...fallbackAccounts.filter((account) => !ids.has(account.id))];
+}
+
+function normalizeCategories(categories) {
+  if (!Array.isArray(categories)) return [];
+  return categories
+    .map((category) => normalizeCategoryName(typeof category === "string" ? category : category.name))
+    .filter(Boolean);
+}
+
+function normalizeCategoryBuckets(categories, buckets = {}) {
+  return Object.fromEntries(
+    categories.map((name) => {
+      const bucket = typeof buckets[name] === "string" ? buckets[name] : getBucket(name);
+      return [name, bucket];
+    }),
+  );
+}
+
+function getDefaultCategoryBudget(categoryName) {
+  const bucket = getBucket(categoryName);
+  if (DEFAULT_BUDGETS.categories[categoryName]) return DEFAULT_BUDGETS.categories[categoryName];
+  if (bucket === "Needs") return 6000;
+  if (bucket === "Wants") return 3500;
+  return 8000;
+}
+
+function normalizeBudgets(categories, storedBudgets = DEFAULT_BUDGETS) {
+  const storedCategories = storedBudgets?.categories || {};
+  return {
+    monthlyTotal: Number(storedBudgets?.monthlyTotal || DEFAULT_BUDGETS.monthlyTotal),
+    categories: Object.fromEntries(
+      categories.map((name) => [name, Number(storedCategories[name] ?? getDefaultCategoryBudget(name))]),
+    ),
+  };
+}
+
+function normalizeAllocationTargets(storedTargets = DEFAULT_ALLOCATION_TARGETS) {
+  return {
+    needs: Math.max(0, Math.min(100, Number(storedTargets?.needs ?? DEFAULT_ALLOCATION_TARGETS.needs))),
+    wants: Math.max(0, Math.min(100, Number(storedTargets?.wants ?? DEFAULT_ALLOCATION_TARGETS.wants))),
+    savings: Math.max(0, Math.min(100, Number(storedTargets?.savings ?? DEFAULT_ALLOCATION_TARGETS.savings))),
+  };
+}
+
+function normalizeRecurringRules(rules, categories) {
+  const categoryFallback = categories[0] || DEFAULT_CATEGORIES[0];
+  return (Array.isArray(rules) ? rules : DEFAULT_RECURRING_RULES).map((rule, index) => ({
+    id: rule.id || `recurring-${index}`,
+    name: rule.name || "Recurring item",
+    category: categories.includes(rule.category) ? rule.category : categoryFallback,
+    amount: Number(rule.amount || 0),
+    frequency: rule.frequency === "weekly" ? "weekly" : "monthly",
+    dueDay: Number(rule.dueDay || 1),
+  }));
+}
+
+function getNextDueDate(rule, anchorDate = new Date()) {
+  const today = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+  if (rule.frequency === "weekly") {
+    const targetDay = Math.max(0, Math.min(6, Number(rule.dueDay || 0)));
+    const currentDay = today.getDay();
+    const offset = (targetDay - currentDay + 7) % 7;
+    const due = new Date(today);
+    due.setDate(today.getDate() + offset);
+    return due;
+  }
+
+  const day = Math.max(1, Math.min(31, Number(rule.dueDay || 1)));
+  const due = new Date(today.getFullYear(), today.getMonth(), day);
+  if (due < today) due.setMonth(due.getMonth() + 1);
+  return due;
+}
+
+function getDaysUntil(date, anchorDate = new Date()) {
+  const start = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
+  const end = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return Math.max(0, Math.round((end - start) / 86400000));
+}
+
+function evaluateAmountExpression(expression) {
+  const source = String(expression || "").replace(/,/g, "").trim();
+  if (!source) return null;
+  if (!/^[\d+\-*/().\s]+$/.test(source)) return null;
+  if (!/[+\-*/]/.test(source)) {
+    const value = Number(source);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+  try {
+    // The expression is restricted above to numbers and arithmetic operators.
+    const value = Function(`"use strict"; return (${source});`)();
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : null;
+  } catch {
+    return null;
+  }
+}
+
+function App() {
+  const [entryMode, setEntryMode] = useState("expense");
+  const [amount, setAmount] = useState("");
+  const [entryDate, setEntryDate] = useState(() => getDateInputValue());
+  const [graphModal, setGraphModal] = useState(null);
+  const [note, setNote] = useState("");
+  const [expenseCategories, setExpenseCategories] = useState(() => readStoredValue(STORAGE_KEYS.expenseCategories, DEFAULT_CATEGORIES));
+  const [categoryBuckets, setCategoryBuckets] = useState(() =>
+    readStoredValue(STORAGE_KEYS.categoryBuckets, Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))),
+  );
+  const [incomeSources, setIncomeSources] = useState(DEFAULT_INCOME_SOURCES);
+  const [category, setCategory] = useState("");
+  const [incomeSource, setIncomeSource] = useState(DEFAULT_INCOME_SOURCES[0]);
+  const [selectedAccount, setSelectedAccount] = useState(DEFAULT_ACCOUNTS[0].id);
+  const [accounts, setAccounts] = useState(() => normalizeAccounts(readStoredValue(STORAGE_KEYS.accounts, DEFAULT_ACCOUNTS)));
+  const [assetName, setAssetName] = useState("");
+  const [assetType, setAssetType] = useState("Bank");
+  const [detailTab, setDetailTab] = useState("accounts");
+  const [periodTab, setPeriodTab] = useState("weekly");
+  const [plannerTab, setPlannerTab] = useState("insights");
+  const [journalCategory, setJournalCategory] = useState("all");
+  const [journalMonth, setJournalMonth] = useState("all");
+  const [journalWeek, setJournalWeek] = useState("all");
+  const [journalSpend, setJournalSpend] = useState("all");
+  const [journalDirection, setJournalDirection] = useState("all");
+  const [journalNoteMode, setJournalNoteMode] = useState("all");
+  const [transactions, setTransactions] = useState(DEMO_TRANSACTIONS);
+  const [assets, setAssets] = useState({ mutualFunds: 126000, stocks: 72500 });
+  const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(STORAGE_KEYS.allocationTargets, DEFAULT_ALLOCATION_TARGETS)));
+  const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, readStoredValue(STORAGE_KEYS.budgets, DEFAULT_BUDGETS)));
+  const [budgetSetupComplete, setBudgetSetupComplete] = useState(() => readStoredValue(STORAGE_KEYS.budgetSetupComplete, false));
+  const [budgetSetupOpen, setBudgetSetupOpen] = useState(() => !readStoredValue(STORAGE_KEYS.budgetSetupComplete, false));
+  const [recurringRules, setRecurringRules] = useState(() =>
+    normalizeRecurringRules(readStoredValue(STORAGE_KEYS.recurringRules, DEFAULT_RECURRING_RULES), expenseCategories),
+  );
+  const [recurringSetupOpen, setRecurringSetupOpen] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [draftAssets, setDraftAssets] = useState(assets);
+  const [remoteMetrics, setRemoteMetrics] = useState(null);
+  const [ripples, setRipples] = useState([]);
+  const [undoStack, setUndoStack] = useState([]);
+  const [status, setStatus] = useState(APPS_SCRIPT_URL ? "Bridge ready" : "Demo mode");
+  const [busy, setBusy] = useState(false);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategoryDraft, setNewCategoryDraft] = useState("");
+  const [addingAccount, setAddingAccount] = useState(false);
+  const [newAccountDraft, setNewAccountDraft] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    async function hydrate() {
+      if (!APPS_SCRIPT_URL) return;
+      try {
+        const data = await apiGetDashboard();
+        if (!alive || !data) return;
+        if (Array.isArray(data.transactions)) {
+          setTransactions(data.transactions.map((transaction) => ({
+            ...transaction,
+            category: normalizeCategoryName(transaction.category),
+            bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
+          })));
+        }
+        if (Array.isArray(data.categories) && data.categories.length) {
+          const nextCategories = normalizeCategories(data.categories);
+          setExpenseCategories(nextCategories);
+          setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
+        }
+        if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
+        if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
+        if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
+        if (Array.isArray(data.accounts)) setAccounts((current) => mergeAccounts(normalizeAccounts(data.accounts), current));
+        if (data.assets) setAssets(normalizeAssets(data.assets));
+        if (data.cells) {
+          setAssets({
+            mutualFunds: Number(data.cells.C16 || 0),
+            stocks: Number(data.cells.C17 || 0),
+          });
+        }
+        if (data.stocksVal || data.mfVal || data.stocks || data.mf) {
+          setAssets(normalizeAssets(data));
+        }
+        const metrics = normalizeMetrics(data);
+        if (metrics) setRemoteMetrics(metrics);
+        setStatus("Updated");
+      } catch {
+        if (alive) setStatus("Bridge unavailable");
+      }
+    }
+    hydrate();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setDraftAssets(assets);
+  }, [assets]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.expenseCategories, expenseCategories);
+  }, [expenseCategories]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.categoryBuckets, categoryBuckets);
+  }, [categoryBuckets]);
+
+  useEffect(() => {
+    setBudgets((current) => normalizeBudgets(expenseCategories, current));
+    setRecurringRules((current) => normalizeRecurringRules(current, expenseCategories));
+  }, [expenseCategories]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.budgets, budgets);
+  }, [budgets]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.budgetSetupComplete, budgetSetupComplete);
+  }, [budgetSetupComplete]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.allocationTargets, allocationTargets);
+  }, [allocationTargets]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.recurringRules, recurringRules);
+  }, [recurringRules]);
+
+  useEffect(() => {
+    writeStoredValue(STORAGE_KEYS.accounts, accounts);
+  }, [accounts]);
+
+  const analytics = useMemo(
+    () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets),
+    [transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets],
+  );
+  const activeGraphDetail = useMemo(() => getGraphDetailConfig(graphModal, analytics), [graphModal, analytics]);
+  const categoryProgressByName = Object.fromEntries(analytics.categoryProgress.map((item) => [item.name, item]));
+  const incomeEntries = useMemo(() => transactions.filter((transaction) => transaction.direction === "income"), [transactions]);
+  const journalOptions = useMemo(() => buildJournalOptions(transactions, expenseCategories, incomeSources), [transactions, expenseCategories, incomeSources]);
+  const filteredJournalEntries = useMemo(
+    () => filterJournalEntries(transactions, {
+      category: journalCategory,
+      direction: journalDirection,
+      month: journalMonth,
+      noteMode: journalNoteMode,
+      spend: journalSpend,
+      week: journalWeek,
+    }),
+    [transactions, journalCategory, journalDirection, journalMonth, journalNoteMode, journalSpend, journalWeek],
+  );
+  const journalSpendTotal = useMemo(
+    () =>
+      filteredJournalEntries
+        .filter((transaction) => transaction.direction !== "income")
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+    [filteredJournalEntries],
+  );
+  const selectedAccountLabel = accounts.find((account) => account.id === selectedAccount)?.name || "Account";
+  const activeCategory = entryMode === "income" ? incomeSource : category;
+  const activeBucket = categoryBuckets[category] || getBucket(category);
+  const canChooseChannel = entryMode !== "expense" || Boolean(category);
+  const calculatedAmount = evaluateAmountExpression(amount);
+  const amountNeedsCalculation = /[+\-*/]/.test(String(amount)) && calculatedAmount !== null;
+  const budgetProgressPercent = budgets.monthlyTotal ? Math.min(100, Math.round((analytics.monthlyBudgetSpent / budgets.monthlyTotal) * 100)) : 0;
+  const budgetPulseTone = analytics.overspend > 0 ? "danger" : budgetProgressPercent >= 82 ? "warn" : "calm";
+  const allocationTargetTotal = allocationTargets.needs + allocationTargets.wants + allocationTargets.savings;
+  const nextRecurringItem = analytics.nextRecurring[0];
+
+  function applyDashboardData(data) {
+    if (!data) return;
+    if (Array.isArray(data.transactions)) {
+      setTransactions(data.transactions.map((transaction) => ({
+        ...transaction,
+        category: normalizeCategoryName(transaction.category),
+        bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
+      })));
+    }
+    if (Array.isArray(data.categories) && data.categories.length) {
+      const nextCategories = normalizeCategories(data.categories);
+      setExpenseCategories(nextCategories);
+      setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
+    }
+    if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
+    if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
+    if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
+    if (Array.isArray(data.accounts)) setAccounts((current) => mergeAccounts(normalizeAccounts(data.accounts), current));
+    if (data.assets) setAssets(normalizeAssets(data.assets));
+    if (data.cells) {
+      setAssets({
+        mutualFunds: Number(data.cells.C16 || 0),
+        stocks: Number(data.cells.C17 || 0),
+      });
+    }
+    if (data.stocksVal || data.mfVal || data.stocks || data.mf) {
+      setAssets(normalizeAssets(data));
+    }
+    const metrics = normalizeMetrics(data);
+    if (metrics) setRemoteMetrics(metrics);
+  }
+
+  async function syncDashboard(silent = true) {
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      const data = await apiGetDashboard();
+      applyDashboardData(data);
+      if (!silent) setStatus("Updated");
+    } catch {
+      if (!silent) setStatus("Bridge unavailable");
+    }
+  }
+
+  async function saveCategoriesToBridge(nextCategories, nextBuckets) {
+    writeStoredValue(STORAGE_KEYS.expenseCategories, nextCategories);
+    writeStoredValue(STORAGE_KEYS.categoryBuckets, nextBuckets);
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      await apiPost("saveCategories", {
+        categories: nextCategories.map((name) => ({
+          name,
+          bucket: nextBuckets[name] || getBucket(name),
+        })),
+        categoryBuckets: nextBuckets,
+      });
+      setStatus("Categories synced");
+    } catch {
+      setStatus("Categories saved locally, bridge failed");
+    }
+  }
+
+  async function saveAccountsToBridge(nextAccounts) {
+    writeStoredValue(STORAGE_KEYS.accounts, nextAccounts);
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      await apiPost("saveAccounts", { accounts: nextAccounts });
+      setStatus("Accounts synced");
+    } catch {
+      setStatus("Accounts saved locally, bridge failed");
+    }
+  }
+
+  async function saveBudgetsToBridge(nextBudgets) {
+    writeStoredValue(STORAGE_KEYS.budgets, nextBudgets);
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      await apiPost("saveBudgets", { budgets: nextBudgets });
+    } catch {
+      setStatus("Budgets saved locally, bridge failed");
+    }
+  }
+
+  async function saveRecurringToBridge(nextRules) {
+    writeStoredValue(STORAGE_KEYS.recurringRules, nextRules);
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      await apiPost("saveRecurring", { recurringRules: nextRules });
+    } catch {
+      setStatus("Recurring saved locally, bridge failed");
+    }
+  }
+
+  function updateMonthlyBudget(nextValue) {
+    const nextBudgets = {
+      ...budgets,
+      monthlyTotal: Math.max(0, Number(nextValue || 0)),
+    };
+    setBudgets(nextBudgets);
+    saveBudgetsToBridge(nextBudgets);
+  }
+
+  function updateCategoryBudget(categoryName, nextValue) {
+    const nextBudgets = {
+      ...budgets,
+      categories: {
+        ...budgets.categories,
+        [categoryName]: Math.max(0, Number(nextValue || 0)),
+      },
+    };
+    setBudgets(nextBudgets);
+    saveBudgetsToBridge(nextBudgets);
+  }
+
+  function updateAllocationTarget(bucketName, nextValue) {
+    setAllocationTargets((current) => ({
+      ...current,
+      [bucketName]: Math.max(0, Math.min(100, Number(nextValue || 0))),
+    }));
+  }
+
+  function completeBudgetSetup() {
+    setBudgetSetupComplete(true);
+    setBudgetSetupOpen(false);
+    writeStoredValue(STORAGE_KEYS.budgetSetupComplete, true);
+  }
+
+  function reopenBudgetSetup() {
+    setBudgetSetupOpen(true);
+  }
+
+  function addRecurringRule() {
+    const nextRule = {
+      id: `recurring-${Date.now()}`,
+      name: "New reminder",
+      category: expenseCategories[0] || DEFAULT_CATEGORIES[0],
+      amount: 0,
+      frequency: "monthly",
+      dueDay: 1,
+    };
+    const nextRules = [nextRule, ...recurringRules];
+    setRecurringRules(nextRules);
+    saveRecurringToBridge(nextRules);
+  }
+
+  function updateRecurringRule(ruleId, patch) {
+    const nextRules = recurringRules.map((rule) =>
+      rule.id === ruleId ? { ...rule, ...patch, amount: patch.amount !== undefined ? Number(patch.amount || 0) : rule.amount } : rule,
+    );
+    setRecurringRules(nextRules);
+    saveRecurringToBridge(nextRules);
+  }
+
+  function deleteRecurringRule(ruleId) {
+    const nextRules = recurringRules.filter((rule) => rule.id !== ruleId);
+    setRecurringRules(nextRules);
+    saveRecurringToBridge(nextRules);
+  }
+
+  function handlePointerMove(event) {
+    document.documentElement.style.setProperty("--mx", `${event.clientX}px`);
+    document.documentElement.style.setProperty("--my", `${event.clientY}px`);
+    document.documentElement.style.setProperty("--bubble-x", `${event.clientX}px`);
+    document.documentElement.style.setProperty("--bubble-y", `${event.clientY}px`);
+  }
+
+  function handleTap(event) {
+    document.documentElement.style.setProperty("--bubble-x", `${event.clientX}px`);
+    document.documentElement.style.setProperty("--bubble-y", `${event.clientY}px`);
+    const id = Date.now();
+    setRipples((current) => [...current.slice(-4), { id, x: event.clientX, y: event.clientY }]);
+    window.setTimeout(() => {
+      setRipples((current) => current.filter((ripple) => ripple.id !== id));
+    }, 900);
+  }
+
+  function pushUndo(label, undo) {
+    setUndoStack((current) => [...current, { label, undo }].slice(-12));
+  }
+
+  function undoLastEdit() {
+    setUndoStack((current) => {
+      const next = [...current];
+      const action = next.pop();
+      if (action) action.undo();
+      return next;
+    });
+  }
+
+  function renameExpenseCategory(oldName, nextName) {
+    const cleanName = nextName.trim();
+    if (!cleanName || cleanName === oldName) return;
+    if (expenseCategories.some((item) => item.toLowerCase() === cleanName.toLowerCase() && item !== oldName)) return;
+    const previousCategories = expenseCategories;
+    const previousBuckets = categoryBuckets;
+    const previousTransactions = transactions;
+    const previousCategory = category;
+    const previousBudgets = budgets;
+    const nextCategories = expenseCategories.map((item) => (item === oldName ? cleanName : item));
+    const nextBuckets = { ...categoryBuckets, [cleanName]: categoryBuckets[oldName] || getBucket(oldName) };
+    delete nextBuckets[oldName];
+    const nextBudgets = {
+      ...budgets,
+      categories: {
+        ...budgets.categories,
+        [cleanName]: budgets.categories[oldName] ?? getDefaultCategoryBudget(cleanName),
+      },
+    };
+    delete nextBudgets.categories[oldName];
+    const nextTransactions = transactions.map((transaction) =>
+      transaction.category === oldName
+        ? { ...transaction, category: cleanName, bucket: transaction.direction === "income" ? "Income" : transaction.bucket }
+        : transaction,
+    );
+
+    pushUndo(`category: ${oldName}`, () => {
+      setExpenseCategories(previousCategories);
+      setCategoryBuckets(previousBuckets);
+      setTransactions(previousTransactions);
+      setCategory(previousCategory);
+      setBudgets(previousBudgets);
+      saveCategoriesToBridge(previousCategories, previousBuckets);
+      saveBudgetsToBridge(previousBudgets);
+    });
+
+    setExpenseCategories(nextCategories);
+    setCategoryBuckets(nextBuckets);
+    setTransactions(nextTransactions);
+    setBudgets(nextBudgets);
+    if (category === oldName) setCategory(cleanName);
+    saveCategoriesToBridge(nextCategories, nextBuckets);
+    saveBudgetsToBridge(nextBudgets);
+  }
+
+  function addExpenseCategory() {
+    const cleanName = newCategoryDraft.trim();
+    if (!cleanName) return;
+    if (expenseCategories.some((item) => item.toLowerCase() === cleanName.toLowerCase())) {
+      setStatus("Category already exists");
+      setNewCategoryDraft("");
+      setAddingCategory(false);
+      return;
+    }
+    const previousCategories = expenseCategories;
+    const previousBuckets = categoryBuckets;
+    const previousCategory = category;
+    const previousBudgets = budgets;
+    const nextCategories = [...expenseCategories, cleanName];
+    const nextBuckets = { ...categoryBuckets, [cleanName]: getBucket(cleanName) };
+    const nextBudgets = {
+      ...budgets,
+      categories: { ...budgets.categories, [cleanName]: getDefaultCategoryBudget(cleanName) },
+    };
+
+    pushUndo(`category: ${cleanName}`, () => {
+      setExpenseCategories(previousCategories);
+      setCategoryBuckets(previousBuckets);
+      setCategory(previousCategory);
+      setBudgets(previousBudgets);
+      saveCategoriesToBridge(previousCategories, previousBuckets);
+      saveBudgetsToBridge(previousBudgets);
+    });
+
+    setExpenseCategories(nextCategories);
+    setCategoryBuckets(nextBuckets);
+    setBudgets(nextBudgets);
+    setCategory(cleanName);
+    setNewCategoryDraft("");
+    setAddingCategory(false);
+    saveCategoriesToBridge(nextCategories, nextBuckets);
+    saveBudgetsToBridge(nextBudgets);
+  }
+
+  function renameIncomeSource(oldName, nextName) {
+    const cleanName = nextName.trim();
+    if (!cleanName || cleanName === oldName) return;
+    const previousSources = incomeSources;
+    const previousTransactions = transactions;
+    const previousSource = incomeSource;
+
+    pushUndo(`source: ${oldName}`, () => {
+      setIncomeSources(previousSources);
+      setTransactions(previousTransactions);
+      setIncomeSource(previousSource);
+    });
+
+    setIncomeSources((current) => current.map((item) => (item === oldName ? cleanName : item)));
+    setTransactions((current) => current.map((transaction) => (transaction.category === oldName ? { ...transaction, category: cleanName } : transaction)));
+    if (incomeSource === oldName) setIncomeSource(cleanName);
+  }
+
+  function updateAccountField(accountId, patch, label = "account") {
+    const currentAccount = accounts.find((account) => account.id === accountId);
+    if (!currentAccount) return;
+    if (patch.name !== undefined && patch.name === currentAccount.name) return;
+    if (patch.balance !== undefined && Number(patch.balance || 0) === Number(currentAccount.balance || 0)) return;
+
+    const previousAccounts = accounts;
+    const nextAccounts = accounts.map((account) =>
+      account.id === accountId
+        ? {
+            ...account,
+            ...patch,
+            balance: patch.balance !== undefined ? Math.max(0, Number(patch.balance || 0)) : account.balance,
+            updatedAt: new Date().toISOString(),
+          }
+        : account,
+    );
+    pushUndo(label, () => {
+      setAccounts(previousAccounts);
+      saveAccountsToBridge(previousAccounts);
+    });
+    setAccounts(nextAccounts);
+    saveAccountsToBridge(nextAccounts);
+  }
+
+  function addAccount() {
+    const cleanName = newAccountDraft.trim();
+    if (!cleanName || accounts.some((account) => account.name.toLowerCase() === cleanName.toLowerCase())) return;
+    const previousAccounts = accounts;
+    const previousSelected = selectedAccount;
+    const nextAccount = {
+      id: makeSlug(cleanName, accounts.map((account) => account.id)),
+      name: cleanName,
+      type: "Bank",
+      balance: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    const nextAccounts = [...accounts, nextAccount];
+
+    pushUndo(`account: ${cleanName}`, () => {
+      setAccounts(previousAccounts);
+      setSelectedAccount(previousSelected);
+      saveAccountsToBridge(previousAccounts);
+    });
+
+    setAccounts(nextAccounts);
+    setSelectedAccount(nextAccount.id);
+    setNewAccountDraft("");
+    setAddingAccount(false);
+    saveAccountsToBridge(nextAccounts);
+  }
+
+  function deleteAccount(accountId) {
+    if (accounts.length <= 1) return;
+    const previousAccounts = accounts;
+    const previousSelected = selectedAccount;
+    const nextAccounts = accounts.filter((account) => account.id !== accountId);
+
+    pushUndo("restore account", () => {
+      setAccounts(previousAccounts);
+      setSelectedAccount(previousSelected);
+      saveAccountsToBridge(previousAccounts);
+    });
+
+    setAccounts(nextAccounts);
+    if (selectedAccount === accountId) setSelectedAccount(nextAccounts[0]?.id || "");
+    saveAccountsToBridge(nextAccounts);
+  }
+
+  function adjustAccount(accountId, delta) {
+    const nextAccounts = accounts.map((account) =>
+      account.id === accountId
+        ? { ...account, balance: Math.max(0, Number(account.balance || 0) + delta), updatedAt: new Date().toISOString() }
+        : account,
+    );
+    setAccounts(nextAccounts);
+    saveAccountsToBridge(nextAccounts);
+    return nextAccounts;
+  }
+
+  function deleteTransaction(transactionId) {
+    const deletedTransaction = transactions.find((transaction) => transaction.id === transactionId);
+    const previousTransactions = transactions;
+    const previousAccounts = accounts;
+    pushUndo("deleted entry", () => {
+      setTransactions(previousTransactions);
+      setAccounts(previousAccounts);
+    });
+    setTransactions((current) => current.filter((transaction) => transaction.id !== transactionId));
+    if (deletedTransaction?.accountId) {
+      adjustAccount(
+        deletedTransaction.accountId,
+        deletedTransaction.direction === "income" ? -deletedTransaction.amount : deletedTransaction.amount,
+      );
+    }
+  }
+
+  function addOrUpdateAsset(name, type, balance) {
+    const normalizedName = name.trim();
+    if (!normalizedName) return null;
+    const id = normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const nextAccount = {
+      id,
+      name: normalizedName,
+      type,
+      balance: Number(balance || 0),
+      updatedAt: new Date().toISOString(),
+    };
+    const exists = accounts.some((account) => account.id === id);
+    const nextAccounts = exists ? accounts.map((account) => (account.id === id ? nextAccount : account)) : [nextAccount, ...accounts];
+    setAccounts(nextAccounts);
+    setSelectedAccount(id);
+    saveAccountsToBridge(nextAccounts);
+    return nextAccount;
+  }
+
+  async function submitEntry(event) {
+    event.preventDefault();
+    const numericAmount = evaluateAmountExpression(amount);
+    if (!numericAmount || numericAmount <= 0) return;
+    if (entryMode === "expense" && !category) {
+      setStatus("Choose expense category first");
+      return;
+    }
+
+    if (entryMode === "asset") {
+      const account = addOrUpdateAsset(assetName || selectedAccountLabel, assetType, numericAmount);
+      if (!account) return;
+      setAmount("");
+      setAssetName("");
+      setBusy(true);
+      setStatus("Writing asset source...");
+      try {
+        await apiPost("updateAssetSource", {
+          account,
+          amount: numericAmount,
+          timestamp: new Date().toISOString(),
+        });
+        await syncDashboard(true);
+        setStatus(APPS_SCRIPT_URL ? "Asset source synced" : "Asset saved locally");
+      } catch {
+        setStatus("Local asset save, bridge failed");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    const direction = entryMode;
+    const entry = makeEntry(numericAmount, activeCategory, direction, selectedAccount, dateFromInputValue(entryDate), note.trim());
+    if (direction === "expense") entry.bucket = activeBucket;
+    setTransactions((current) => [entry, ...current]);
+    const nextAccounts = adjustAccount(selectedAccount, direction === "expense" ? -numericAmount : numericAmount);
+    setAmount("");
+    setNote("");
+    setEntryDate(getDateInputValue());
+    if (direction === "expense") setCategory("");
+    setStatus("Entry logged");
+
+    apiPost(direction === "expense" ? "addExpense" : "addIncome", {
+        ...entry,
+        type: entry.bucket,
+        source: activeCategory,
+        account: selectedAccountLabel,
+        accountId: selectedAccount,
+        accounts: nextAccounts,
+      })
+      .then(() => {
+        setStatus(APPS_SCRIPT_URL ? `${direction === "expense" ? "Expense" : "Income"} synced` : "Saved locally");
+      })
+      .catch(() => {
+        setStatus("Local save, bridge failed");
+      });
+  }
+
+  async function saveAssets(event) {
+    event.preventDefault();
+    const payload = {
+      stocks: Number(draftAssets.stocks || 0),
+      mf: Number(draftAssets.mutualFunds || 0),
+      cells: {
+        C16: Number(draftAssets.mutualFunds || 0),
+        C17: Number(draftAssets.stocks || 0),
+      },
+      valuations: {
+        mutualFunds: Number(draftAssets.mutualFunds || 0),
+        stocks: Number(draftAssets.stocks || 0),
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    setBusy(true);
+    setStatus("Syncing assets...");
+    const syncedAccounts = accounts.map((account) => {
+      if (account.id === "stocks") return { ...account, balance: payload.valuations.stocks, updatedAt: payload.timestamp };
+      if (account.id === "mutualFunds") return { ...account, balance: payload.valuations.mutualFunds, updatedAt: payload.timestamp };
+      return account;
+    });
+    try {
+      await apiPost("updateGroww", payload);
+      setAssets(payload.valuations);
+      setAccounts(syncedAccounts);
+      await saveAccountsToBridge(syncedAccounts);
+      await syncDashboard(true);
+      setSyncOpen(false);
+      setStatus(APPS_SCRIPT_URL ? "Assets synced to C16/C17" : "Assets saved locally");
+    } catch {
+      setAssets(payload.valuations);
+      setAccounts(syncedAccounts);
+      await saveAccountsToBridge(syncedAccounts);
+      setSyncOpen(false);
+      setStatus("Local asset save, bridge failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const today = new Date();
+
+  return (
+    <main className="app" onClick={handleTap} onPointerMove={handlePointerMove}>
+      <div className="bubble-field" aria-hidden="true">
+        {Array.from({ length: 13 }).map((_, index) => (
+          <span className={`bubble bubble-${index + 1}`} key={index} />
+        ))}
+        {ripples.map((ripple) => (
+          <i className="tap-ripple" key={ripple.id} style={{ left: ripple.x, top: ripple.y }} />
+        ))}
+      </div>
+
+      <section className="journal-panel glass">
+        <div className="panel-kicker">
+          <CalendarDays size={16} />
+          <span>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+        </div>
+
+        <div className="journal-title">
+          <h1>Finance Command Center</h1>
+        </div>
+
+        <div className="entry-tabs" role="tablist" aria-label="Ledger entry type">
+          {ENTRY_TABS.map((tab) => (
+            <button
+              aria-selected={entryMode === tab.id}
+              className={`entry-tab ${entryMode === tab.id ? "is-active" : ""}`}
+              key={tab.id}
+              onClick={() => {
+                setEntryMode(tab.id);
+                setCategory("");
+              }}
+              role="tab"
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="entry-toolbar">
+          <button
+            aria-label="Go back one edit"
+            className="undo-button"
+            disabled={!undoStack.length}
+            onClick={undoLastEdit}
+            title="Go back one edit"
+            type="button"
+          >
+            <ArrowLeft size={16} />
+          </button>
+        </div>
+
+        <form className="entry-form" onSubmit={submitEntry}>
+          <label className="amount-field amount-field-top" aria-label={`${entryMode} amount`}>
+            <IndianRupee size={34} />
+            <input
+              value={amount}
+              inputMode="decimal"
+              placeholder="0"
+              type="text"
+              onChange={(event) => setAmount(event.target.value)}
+            />
+            {amountNeedsCalculation && (
+              <button
+                aria-label={`Use calculated amount ${calculatedAmount}`}
+                className="amount-calc-button"
+                onClick={() => setAmount(String(calculatedAmount))}
+                title={`Use ${calculatedAmount}`}
+                type="button"
+              >
+                <Check size={18} />
+              </button>
+            )}
+          </label>
+
+          {entryMode !== "asset" && (
+            <div className="note-cluster">
+              <label className="entry-date-field">
+                <span>Date</span>
+                <input
+                  aria-label="Entry date"
+                  type="date"
+                  value={entryDate}
+                  onChange={(event) => setEntryDate(event.target.value)}
+                />
+              </label>
+              <div className="note-field">
+                <label htmlFor="entry-description">Description</label>
+                <div className={`description-input-shell ${note ? "has-description" : ""}`}>
+                  <input
+                    id="entry-description"
+                    value={note}
+                    maxLength={90}
+                    placeholder="Optional context: vendor, place, reason..."
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                  <div className="note-suggestions" aria-hidden="true">
+                    {NOTE_SUGGESTIONS.map((suggestion, index) => (
+                      <span key={suggestion} style={{ "--hint-index": index }}>
+                        {suggestion}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {entryMode === "expense" && !category && (
+            <div className="category-grid fade-panel" role="radiogroup" aria-label="Expense category">
+              {expenseCategories.map((item) => {
+                const progress = categoryProgressByName[item] || { spent: 0, limit: budgets.categories[item] || 0, percent: 0, status: "calm" };
+                return (
+                  <div
+                    aria-checked={category === item}
+                    className={`category-token editable-token ${category === item ? "is-active" : ""}`}
+                    key={item}
+                    onClick={() => setCategory(item)}
+                    role="radio"
+                    tabIndex={0}
+                  >
+                    <span className="editable-display">{item}</span>
+                    <span className="category-budget-meta">
+                      ₹{formatMoney(progress.spent)} / ₹{formatMoney(progress.limit)}
+                    </span>
+                    <span className="category-progress-line" aria-hidden="true">
+                      <i className={`is-${progress.status}`} style={{ width: `${Math.min(100, progress.percent)}%` }} />
+                    </span>
+                  </div>
+                );
+              })}
+              {addingCategory ? (
+                <div className="category-token add-editor-token">
+                  <input
+                    autoFocus
+                    aria-label="New expense category"
+                    placeholder="New category"
+                    value={newCategoryDraft}
+                    onChange={(event) => setNewCategoryDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addExpenseCategory();
+                      }
+                      if (event.key === "Escape") {
+                        setAddingCategory(false);
+                        setNewCategoryDraft("");
+                      }
+                    }}
+                  />
+                  <button aria-label="Save category" className="token-action-button" onClick={addExpenseCategory} type="button">
+                    <Check size={14} />
+                  </button>
+                  <button
+                    aria-label="Cancel category"
+                    className="token-action-button"
+                    onClick={() => {
+                      setAddingCategory(false);
+                      setNewCategoryDraft("");
+                    }}
+                    type="button"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button className="category-token add-token" onClick={() => setAddingCategory(true)} type="button">
+                  <Plus size={18} />
+                  <span>Category</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {entryMode === "expense" && category && (
+            <div className="selected-flow-card fade-panel">
+              <button aria-label="Change expense category" className="back-chip" onClick={() => setCategory("")} type="button">
+                <ArrowLeft size={16} />
+              </button>
+              <div>
+                <span>Category</span>
+                <strong>
+                  <TapToEditText value={category} onCommit={(nextName) => renameExpenseCategory(category, nextName)} />
+                </strong>
+              </div>
+              <b>{selectedAccountLabel}</b>
+            </div>
+          )}
+
+          {entryMode === "income" && (
+            <div className="category-grid fade-panel" role="radiogroup" aria-label="Income source">
+              {incomeSources.map((item) => (
+                <div
+                  aria-checked={incomeSource === item}
+                  className={`category-token editable-token income-token ${incomeSource === item ? "is-active" : ""}`}
+                  key={item}
+                  onClick={() => setIncomeSource(item)}
+                  role="radio"
+                  tabIndex={0}
+                >
+                  <EditableText value={item} onCommit={(nextName) => renameIncomeSource(item, nextName)} onFocus={() => setIncomeSource(item)} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {entryMode === "asset" && (
+            <div className="asset-entry-grid">
+              <label className="mini-input">
+                <span>Asset source</span>
+                <input
+                  placeholder="SBI Account, Gold, Crypto..."
+                  value={assetName}
+                  onChange={(event) => setAssetName(event.target.value)}
+                />
+              </label>
+              <label className="mini-input">
+                <span>Type</span>
+                <select value={assetType} onChange={(event) => setAssetType(event.target.value)}>
+                  <option>Bank</option>
+                  <option>Market</option>
+                  <option>Cash</option>
+                  <option>Real Estate</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          {entryMode !== "asset" && canChooseChannel && (
+            <div className="channel-panel fade-panel">
+              <span className="section-label">{entryMode === "expense" ? "Paid through" : "Received into"}</span>
+              <div className="account-grid" role="radiogroup" aria-label="Account or asset source">
+                {accounts.map((account) => (
+                  <div
+                    aria-checked={selectedAccount === account.id}
+                    className={`account-token ${selectedAccount === account.id ? "is-active" : ""}`}
+                    key={account.id}
+                    onClick={() => setSelectedAccount(account.id)}
+                    role="radio"
+                    tabIndex={0}
+                  >
+                    <span>{account.name}</span>
+                    <button
+                      aria-label={`Delete ${account.name}`}
+                      className="token-delete-button account-delete-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        deleteAccount(account.id);
+                      }}
+                      type="button"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+                {addingAccount ? (
+                  <div className="account-token add-editor-token">
+                    <input
+                      autoFocus
+                      aria-label="New account"
+                      placeholder="New account"
+                      value={newAccountDraft}
+                      onChange={(event) => setNewAccountDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addAccount();
+                        }
+                        if (event.key === "Escape") {
+                          setAddingAccount(false);
+                          setNewAccountDraft("");
+                        }
+                      }}
+                    />
+                    <button aria-label="Save account" className="token-action-button" onClick={addAccount} type="button">
+                      <Check size={14} />
+                    </button>
+                    <button
+                      aria-label="Cancel account"
+                      className="token-action-button"
+                      onClick={() => {
+                        setAddingAccount(false);
+                        setNewAccountDraft("");
+                      }}
+                      type="button"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button className="account-token add-token" onClick={() => setAddingAccount(true)} type="button">
+                    <Plus size={17} />
+                    <span>Account</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <button className="submit-button" type="submit">
+            {busy ? <Loader2 className="spin" size={18} /> : entryMode === "asset" ? <Plus size={18} /> : <Send size={18} />}
+            <span>{entryMode === "asset" ? "Save source" : "Log entry"}</span>
+          </button>
+        </form>
+
+        <div className="recent-stack">
+          <div className="journal-filter-head">
+            <div>
+              <span className="section-label">Recent journal marks</span>
+              <strong>₹{formatMoney(journalSpendTotal)}</strong>
+            </div>
+            <span>{filteredJournalEntries.length} shown</span>
+          </div>
+          <div className="journal-filters" aria-label="Journal filters">
+            <label>
+              <span>Category</span>
+              <select value={journalCategory} onChange={(event) => setJournalCategory(event.target.value)}>
+                <option value="all">All categories</option>
+                {journalOptions.categories.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Month</span>
+              <select value={journalMonth} onChange={(event) => setJournalMonth(event.target.value)}>
+                <option value="all">All months</option>
+                {journalOptions.months.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Week</span>
+              <select value={journalWeek} onChange={(event) => setJournalWeek(event.target.value)}>
+                <option value="all">All weeks</option>
+                {journalOptions.weeks.map((item) => (
+                  <option key={item} value={item}>
+                    W{item}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Spend</span>
+              <select value={journalSpend} onChange={(event) => setJournalSpend(event.target.value)}>
+                {JOURNAL_SPEND_FILTERS.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Type</span>
+              <select value={journalDirection} onChange={(event) => setJournalDirection(event.target.value)}>
+                <option value="all">All entries</option>
+                <option value="expense">Expenses</option>
+                <option value="income">Income</option>
+              </select>
+            </label>
+            <label>
+              <span>Description</span>
+              <select value={journalNoteMode} onChange={(event) => setJournalNoteMode(event.target.value)}>
+                <option value="all">All descriptions</option>
+                <option value="with">With description</option>
+                <option value="without">No description</option>
+              </select>
+            </label>
+          </div>
+          <div className="recent-list" aria-label="Recent journal entries">
+            {filteredJournalEntries.slice(0, 50).map((transaction) => (
+            <article className="transaction-row" key={transaction.id}>
+              <div>
+                <strong>{transaction.category}</strong>
+                {transaction.note && <em>{transaction.note}</em>}
+              </div>
+              <b className={transaction.direction === "income" ? "is-income" : "is-expense"}>
+                {transaction.direction === "income" ? "+" : "-"}₹{formatMoney(transaction.amount)}
+              </b>
+            </article>
+            ))}
+            {!filteredJournalEntries.length && <div className="empty-journal">No journal entries match these filters</div>}
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-panel">
+        <header className="dashboard-header glass">
+          <div>
+            <span className="section-label">Atmospheric finance canvas</span>
+            <h2>{analytics.displayLabel}</h2>
+          </div>
+          <div className="dashboard-actions">
+            <div className="period-tabs" role="tablist" aria-label="Graph period">
+              {PERIOD_TABS.map((tab) => (
+                <button
+                  aria-selected={periodTab === tab.id}
+                  className={`period-tab ${periodTab === tab.id ? "is-active" : ""}`}
+                  key={tab.id}
+                  onClick={() => setPeriodTab(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <button className="sync-button" type="button" onClick={() => setSyncOpen(true)}>
+              <RefreshCw size={17} />
+              <span>Asset sync</span>
+            </button>
+          </div>
+        </header>
+
+        <section className="command-grid" aria-label="Budget recurring and allocation controls">
+          <button className={`command-heading ${budgetSetupOpen ? "is-open" : ""}`} onClick={budgetSetupOpen ? completeBudgetSetup : reopenBudgetSetup} type="button">
+            <span className="section-label">Set Budget for the Month</span>
+            <span className="command-heading-action">
+              {budgetSetupOpen ? "Done" : "Open"}
+              <ChevronDown size={16} />
+            </span>
+          </button>
+          {budgetSetupOpen ? (
+            <>
+          <section className={`command-card budget-command-card glass is-${budgetPulseTone} ${budgetSetupOpen ? "is-open" : ""}`} aria-label="Monthly budget">
+            <div className="budget-pulse-copy">
+              <span className="section-label">Budget</span>
+              <strong>
+                &#8377;{formatMoney(analytics.monthlyBudgetSpent)} / &#8377;{formatMoney(budgets.monthlyTotal)}
+              </strong>
+              <p>
+                {analytics.overspend > 0
+                  ? `Over by ${formatMoney(analytics.overspend)}`
+                  : `${formatMoney(analytics.budgetRemaining)} left`}
+              </p>
+            </div>
+            <div className="budget-pulse-track" aria-hidden="true">
+              <i style={{ width: `${budgetProgressPercent}%` }} />
+            </div>
+
+            {budgetSetupOpen && (
+              <div className="budget-inline-editor">
+                <label className="budget-total-input">
+                  <span>Total target</span>
+                  <input
+                    aria-label="Monthly total budget"
+                    inputMode="decimal"
+                    type="number"
+                    value={budgets.monthlyTotal}
+                    onChange={(event) => updateMonthlyBudget(event.target.value)}
+                  />
+                </label>
+                <div className="budget-limit-grid">
+                  {analytics.categoryProgress.map((item) => (
+                    <label className={`budget-limit-line is-${item.status}`} key={item.name}>
+                      <span>{item.name}</span>
+                      <b>&#8377;{formatMoney(item.spent)}</b>
+                      <input
+                        aria-label={`${item.name} budget limit`}
+                        inputMode="decimal"
+                        type="number"
+                        value={budgets.categories[item.name] || 0}
+                        onChange={(event) => updateCategoryBudget(item.name, event.target.value)}
+                      />
+                      <i aria-hidden="true">
+                        <em style={{ width: `${Math.min(100, item.percent)}%` }} />
+                      </i>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className={`command-card recurring-command-card glass ${recurringSetupOpen ? "is-open" : ""}`} aria-label="Recurring schedule">
+            <div className="command-card-copy">
+              <span className="section-label">Recurring</span>
+              <strong>&#8377;{formatMoney(analytics.recurringMonthlyLoad)} monthly load</strong>
+              <p>
+                {nextRecurringItem
+                  ? `${nextRecurringItem.name} due in ${nextRecurringItem.daysUntil}d`
+                  : "No reminders set"}
+              </p>
+            </div>
+            <div className="command-card-actions">
+              <button className="mini-action-button" onClick={addRecurringRule} type="button">
+                <Plus size={15} />
+                <span>Add</span>
+              </button>
+              <button className="mini-action-button" onClick={() => setRecurringSetupOpen((open) => !open)} type="button">
+                <Repeat size={15} />
+                <span>{recurringSetupOpen ? "Done" : "Manage"}</span>
+              </button>
+            </div>
+
+            {recurringSetupOpen && (
+              <div className="recurring-list">
+                {recurringRules.map((rule) => {
+                  const nextDue = getNextDueDate(rule, today);
+                  return (
+                    <article className="recurring-row" key={rule.id}>
+                      <input
+                        aria-label={`${rule.name} name`}
+                        value={rule.name}
+                        onChange={(event) => updateRecurringRule(rule.id, { name: event.target.value })}
+                      />
+                      <select
+                        aria-label={`${rule.name} category`}
+                        value={rule.category}
+                        onChange={(event) => updateRecurringRule(rule.id, { category: event.target.value })}
+                      >
+                        {expenseCategories.map((item) => (
+                          <option key={item}>{item}</option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label={`${rule.name} amount`}
+                        inputMode="decimal"
+                        type="number"
+                        value={rule.amount}
+                        onChange={(event) => updateRecurringRule(rule.id, { amount: event.target.value })}
+                      />
+                      <select
+                        aria-label={`${rule.name} frequency`}
+                        value={rule.frequency}
+                        onChange={(event) => updateRecurringRule(rule.id, { frequency: event.target.value })}
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                      <input
+                        aria-label={`${rule.name} due day`}
+                        inputMode="numeric"
+                        max={rule.frequency === "weekly" ? "6" : "31"}
+                        min="1"
+                        type="number"
+                        value={rule.dueDay}
+                        onChange={(event) => updateRecurringRule(rule.id, { dueDay: event.target.value })}
+                      />
+                      <span>
+                        {nextDue.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {getDaysUntil(nextDue, today)}d
+                      </span>
+                      <button aria-label={`Delete ${rule.name}`} className="transaction-delete" onClick={() => deleteRecurringRule(rule.id)} type="button">
+                        <Trash2 size={13} />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className={`command-card allocation-target-card glass ${allocationTargetTotal === 100 ? "" : "is-warn"}`} aria-label="Needs wants savings targets">
+            <div className="command-card-copy">
+              <span className="section-label">Split</span>
+              <strong>{allocationTargets.needs}/{allocationTargets.wants}/{allocationTargets.savings}</strong>
+              <p>{allocationTargetTotal === 100 ? "Targets balance to 100%" : `Adjust total from ${allocationTargetTotal}% to 100%`}</p>
+            </div>
+            <div className="target-input-grid">
+              {[
+                ["needs", "Needs"],
+                ["wants", "Wants"],
+                ["savings", "Savings"],
+              ].map(([key, label]) => (
+                <label className="target-input" key={key}>
+                  <span>{label}</span>
+                  <input
+                    aria-label={`${label} allocation target`}
+                    inputMode="decimal"
+                    max="100"
+                    min="0"
+                    type="number"
+                    value={allocationTargets[key]}
+                    onChange={(event) => updateAllocationTarget(key, event.target.value)}
+                  />
+                  <small>Actual {analytics.allocations[key]}%</small>
+                </label>
+              ))}
+            </div>
+          </section>
+            </>
+          ) : (
+            <section className="command-summary glass" aria-label="Budget summary">
+              <div>
+                <span>Monthly budget</span>
+                <strong>&#8377;{formatMoney(budgets.monthlyTotal)}</strong>
+              </div>
+              <div>
+                <span>Recurring</span>
+                <strong>&#8377;{formatMoney(analytics.recurringMonthlyLoad)}</strong>
+              </div>
+              <div>
+                <span>Target split</span>
+                <strong>{allocationTargets.needs}/{allocationTargets.wants}/{allocationTargets.savings}</strong>
+              </div>
+            </section>
+          )}
+        </section>
+
+        {false && budgetSetupComplete && !budgetSetupOpen && (
+          <section className={`budget-pulse glass is-${budgetPulseTone}`} aria-label="Monthly budget pulse">
+            <div className="budget-pulse-copy">
+              <span className="section-label">Monthly budget</span>
+              <strong>
+                &#8377;{formatMoney(analytics.monthlyBudgetSpent)} / &#8377;{formatMoney(budgets.monthlyTotal)}
+              </strong>
+            </div>
+            <div className="budget-pulse-track" aria-hidden="true">
+              <i style={{ width: `${budgetProgressPercent}%` }} />
+            </div>
+            <div className="budget-pulse-meta">
+              <span>
+                {analytics.overspend > 0
+                  ? `Over by ${formatMoney(analytics.overspend)}`
+                  : `${formatMoney(analytics.budgetRemaining)} left`}
+              </span>
+              <button className="mini-action-button" onClick={reopenBudgetSetup} type="button">
+                <Target size={15} />
+                <span>Edit limits</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        <section className="metric-grid">
+          <MetricCard icon={<WalletCards size={18} />} label="Total Burn" value={`₹${formatMoney(analytics.totalBurn)}`} />
+          <MetricCard icon={<PiggyBank size={18} />} label="Budget Left" value={`₹${formatMoney(analytics.budgetRemaining)}`} />
+          <MetricCard icon={<Banknote size={18} />} label="Needs / Wants / Savings" value={`${analytics.allocations.needs}/${analytics.allocations.wants}/${analytics.allocations.savings}%`} />
+        </section>
+
+        <section className="planning-console glass">
+          <div className="planner-tabs" role="tablist" aria-label="Planning console">
+            {PLANNER_TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  aria-selected={plannerTab === tab.id}
+                  className={`planner-tab ${plannerTab === tab.id ? "is-active" : ""}`}
+                  key={tab.id}
+                  onClick={() => setPlannerTab(tab.id)}
+                  role="tab"
+                  type="button"
+                >
+                  <Icon size={15} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {plannerTab === "budget" && (
+            <div className="planner-panel budget-panel" role="tabpanel">
+              {budgetSetupComplete && !budgetSetupOpen ? (
+                <div className="budget-collapsed">
+                  <div>
+                    <span className="section-label">Budget limits are tucked away</span>
+                    <strong>&#8377;{formatMoney(analytics.budgetRemaining)} remaining this month</strong>
+                    <p>Category lines keep tracking spend above the fold. Open limits only when targets need tuning.</p>
+                  </div>
+                  <button className="mini-action-button" onClick={reopenBudgetSetup} type="button">
+                    <Target size={15} />
+                    <span>Edit limits</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+              <div className="budget-hero budget-setup-card">
+                <div>
+                  <span className="section-label">One-time monthly limit</span>
+                  <strong>₹{formatMoney(analytics.monthlyBudgetSpent)} / ₹{formatMoney(budgets.monthlyTotal)}</strong>
+                  <p>
+                    Forecast closes near ₹{formatMoney(analytics.forecast.projectedBurn)} with ₹{formatMoney(analytics.budgetRemaining)} currently unassigned.
+                  </p>
+                </div>
+                <label className="budget-total-input">
+                  <span>Total target</span>
+                  <input
+                    aria-label="Monthly total budget"
+                    inputMode="decimal"
+                    type="number"
+                    value={budgets.monthlyTotal}
+                    onChange={(event) => updateMonthlyBudget(event.target.value)}
+                  />
+                </label>
+                <button className="mini-action-button budget-save-button" onClick={completeBudgetSetup} type="button">
+                  <Check size={15} />
+                  <span>Set budget</span>
+                </button>
+              </div>
+
+              <div className="budget-limit-grid">
+                {analytics.categoryProgress.map((item) => (
+                  <label className={`budget-limit-line is-${item.status}`} key={item.name}>
+                    <span>{item.name}</span>
+                    <b>₹{formatMoney(item.spent)}</b>
+                    <input
+                      aria-label={`${item.name} budget limit`}
+                      inputMode="decimal"
+                      type="number"
+                      value={budgets.categories[item.name] || 0}
+                      onChange={(event) => updateCategoryBudget(item.name, event.target.value)}
+                    />
+                    <i aria-hidden="true">
+                      <em style={{ width: `${Math.min(100, item.percent)}%` }} />
+                    </i>
+                  </label>
+                ))}
+              </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {plannerTab === "recurring" && (
+            <div className="planner-panel recurring-panel" role="tabpanel">
+              <div className="planner-panel-heading">
+                <div>
+                  <span className="section-label">Recurring watchlist</span>
+                  <strong>₹{formatMoney(analytics.recurringMonthlyLoad)} expected this month</strong>
+                </div>
+                <button className="mini-action-button" onClick={addRecurringRule} type="button">
+                  <Plus size={15} />
+                  <span>Add</span>
+                </button>
+              </div>
+
+              <div className="recurring-list">
+                {recurringRules.map((rule) => {
+                  const nextDue = getNextDueDate(rule, today);
+                  return (
+                    <article className="recurring-row" key={rule.id}>
+                      <input
+                        aria-label={`${rule.name} name`}
+                        value={rule.name}
+                        onChange={(event) => updateRecurringRule(rule.id, { name: event.target.value })}
+                      />
+                      <select
+                        aria-label={`${rule.name} category`}
+                        value={rule.category}
+                        onChange={(event) => updateRecurringRule(rule.id, { category: event.target.value })}
+                      >
+                        {expenseCategories.map((item) => (
+                          <option key={item}>{item}</option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label={`${rule.name} amount`}
+                        inputMode="decimal"
+                        type="number"
+                        value={rule.amount}
+                        onChange={(event) => updateRecurringRule(rule.id, { amount: event.target.value })}
+                      />
+                      <select
+                        aria-label={`${rule.name} frequency`}
+                        value={rule.frequency}
+                        onChange={(event) => updateRecurringRule(rule.id, { frequency: event.target.value })}
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                      <input
+                        aria-label={`${rule.name} due day`}
+                        inputMode="numeric"
+                        max={rule.frequency === "weekly" ? "6" : "31"}
+                        min="1"
+                        type="number"
+                        value={rule.dueDay}
+                        onChange={(event) => updateRecurringRule(rule.id, { dueDay: event.target.value })}
+                      />
+                      <span>
+                        {nextDue.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {getDaysUntil(nextDue, today)}d
+                      </span>
+                      <button aria-label={`Delete ${rule.name}`} className="transaction-delete" onClick={() => deleteRecurringRule(rule.id)} type="button">
+                        <Trash2 size={13} />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {plannerTab === "insights" && (
+            <div className="planner-panel insight-panel" role="tabpanel">
+              {analytics.insightCards.map((card) => (
+                <article className={card.tone} key={card.title}>
+                  <span>{card.label}</span>
+                  <strong>{card.title}</strong>
+                  <p>{card.copy}</p>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {plannerTab === "review" && (
+            <div className="planner-panel review-panel" role="tabpanel">
+              <article>
+                <span className="section-label">End-of-month review</span>
+                <strong>{analytics.review.headline}</strong>
+                <p>{analytics.review.copy}</p>
+              </article>
+              <div className="review-grid">
+                <div>
+                  <span>Biggest category</span>
+                  <b>{analytics.review.biggestCategory}</b>
+                </div>
+                <div>
+                  <span>Overspend</span>
+                  <b>₹{formatMoney(analytics.overspend)}</b>
+                </div>
+                <div>
+                  <span>Target trend</span>
+                  <b>{analytics.trend.label}</b>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="analytics-grid">
+          <article className="chart-card glass">
+            <div className="card-heading">
+              <div>
+                <span className="section-label">{analytics.periodLabel} velocity</span>
+                <h3>{analytics.periodLabel} burn profile</h3>
+              </div>
+              <button className="chart-expand-button" onClick={() => setGraphModal("velocity")} type="button">
+                <TrendingUp size={16} />
+                <span>Expand</span>
+                <ChevronDown size={15} />
+              </button>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={analytics.velocity} margin={{ left: 0, right: 8, top: 12, bottom: 2 }}>
+                <defs>
+                  <linearGradient id="burnGradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#B77954" stopOpacity={0.46} />
+                    <stop offset="85%" stopColor="#B77954" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#EAE7DC" strokeDasharray="4 7" vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }} />
+                <YAxis
+                  tickFormatter={(value) => (value >= 1000 ? `${Math.round(value / 1000)}k` : value)}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }}
+                  width={56}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "rgba(255,255,255,.86)",
+                    border: "1px solid #EAE7DC",
+                    borderRadius: 8,
+                    color: "#2B2D42",
+                  }}
+                  formatter={(value) => [`₹${formatMoney(value)}`, "Burn"]}
+                />
+                <ReferenceLine
+                  y={analytics.chartTarget}
+                  stroke="#2B2D42"
+                  strokeDasharray="6 6"
+                  strokeOpacity={0.42}
+                  label={{
+                    value: `Target ₹${formatMoney(analytics.chartTarget)}`,
+                    position: "insideTopRight",
+                    fill: "#2B2D42",
+                    fontFamily: "JetBrains Mono, Fira Code, ui-monospace",
+                    fontSize: 11,
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="burn"
+                  stroke="#9D6242"
+                  strokeWidth={3}
+                  fill="url(#burnGradient)"
+                  activeDot={{ r: 5 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div className="chart-diagnostics">
+              <span>Target ₹{formatMoney(analytics.chartTarget)}</span>
+              <span>{analytics.chartReadout.varianceLabel}</span>
+              <span>{analytics.trend.copy}</span>
+            </div>
+          </article>
+
+          <article className="pie-card glass">
+            <div className="card-heading">
+              <div>
+                <span className="section-label">Category spends</span>
+                <h3>Where the money went</h3>
+              </div>
+              <button className="chart-expand-button" onClick={() => setGraphModal("categories")} type="button">
+                <Banknote size={16} />
+                <span>Expand</span>
+                <ChevronDown size={15} />
+              </button>
+            </div>
+            <div className="pie-layout">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={analytics.categorySpends}
+                    dataKey="value"
+                    innerRadius="54%"
+                    outerRadius="82%"
+                    paddingAngle={2}
+                    stroke="#FDFCF0"
+                    strokeWidth={2}
+                  >
+                    {analytics.categorySpends.map((slice) => (
+                      <Cell fill={slice.color} key={slice.name} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(255,255,255,.9)",
+                      border: "1px solid #EAE7DC",
+                      borderRadius: 8,
+                      color: "#2B2D42",
+                    }}
+                    formatter={(value) => [`₹${formatMoney(value)}`, "Spend"]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="pie-legend">
+              {analytics.categorySpends.map((slice) => (
+                <div className="pie-line" key={slice.name}>
+                  <span style={{ "--dot": slice.color }}>{slice.name}</span>
+                  <b>₹{formatMoney(slice.value)}</b>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="allocation-card glass">
+            <div className="card-heading">
+              <div>
+                <span className="section-label">{allocationTargets.needs} / {allocationTargets.wants} / {allocationTargets.savings} tracker</span>
+                <h3>Actual allocation</h3>
+              </div>
+              <button className="chart-expand-button" onClick={() => setGraphModal("allocations")} type="button">
+                <Target size={16} />
+                <span>Expand</span>
+                <ChevronDown size={15} />
+              </button>
+            </div>
+
+            <div className="allocation-bar" aria-label="Actual needs wants savings split">
+              <span className="needs" style={{ width: `${analytics.allocations.needs}%` }} />
+              <span className="wants" style={{ width: `${analytics.allocations.wants}%` }} />
+              <span className="savings" style={{ width: `${analytics.allocations.savings}%` }} />
+            </div>
+
+            <div className="allocation-legend">
+              <AllocationLine label="Needs" target={`${allocationTargets.needs}%`} value={analytics.allocations.needs} />
+              <AllocationLine label="Wants" target={`${allocationTargets.wants}%`} value={analytics.allocations.wants} />
+              <AllocationLine label="Savings" target={`${allocationTargets.savings}%`} value={analytics.allocations.savings} />
+            </div>
+
+            <div className="asset-note">
+              <div className="detail-tabs" role="tablist" aria-label="Financial detail view">
+                <button
+                  aria-selected={detailTab === "accounts"}
+                  className={`detail-tab ${detailTab === "accounts" ? "is-active" : ""}`}
+                  onClick={() => setDetailTab("accounts")}
+                  role="tab"
+                  type="button"
+                >
+                  Accounts
+                </button>
+                <button
+                  aria-selected={detailTab === "income"}
+                  className={`detail-tab ${detailTab === "income" ? "is-active" : ""}`}
+                  onClick={() => setDetailTab("income")}
+                  role="tab"
+                  type="button"
+                >
+                  Income
+                </button>
+              </div>
+
+              {detailTab === "accounts" && (
+                <div className="account-register" role="tabpanel">
+                  {accounts.map((account) => (
+                    <div className="account-line editable-account-line" key={account.id}>
+                      <label>
+                        <Landmark size={13} />
+                        <EditableText value={account.name} onCommit={(nextName) => updateAccountField(account.id, { name: nextName.trim() || account.name }, "account name")} />
+                      </label>
+                      <EditableNumber
+                        aria-label={`${account.name} balance`}
+                        value={account.balance}
+                        onCommit={(nextBalance) => updateAccountField(account.id, { balance: nextBalance }, `${account.name} balance`)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {detailTab === "income" && (
+                <div className="account-register" role="tabpanel">
+                  {incomeEntries.length ? (
+                    incomeEntries.slice(0, 6).map((entry) => (
+                      <div className="account-line income-line" key={entry.id}>
+                        <span>
+                          <PiggyBank size={13} />
+                          {entry.category}
+                        </span>
+                        <b>+₹{formatMoney(entry.amount)}</b>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-detail">No income logged yet</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </article>
+        </section>
+
+        <section className="investment-summary glass">
+          <div className="investment-copy">
+            <span className="section-label">Portfolio pulse</span>
+            <strong>₹{formatMoney(analytics.portfolioTotal)}</strong>
+            <p>
+              Market exposure is {analytics.marketShare}% with ₹{formatMoney(analytics.liquidityTotal)} available across liquid accounts.
+            </p>
+          </div>
+
+          <div className="investment-radar" aria-hidden="true">
+            <span className="radar-core">₹</span>
+            <i className="radar-ring ring-one" />
+            <i className="radar-ring ring-two" />
+          </div>
+
+          <div className="investment-actions">
+            <div className="investment-chip-row">
+              <span>Stocks ₹{formatMoney(assets.stocks)}</span>
+              <span>MF ₹{formatMoney(assets.mutualFunds)}</span>
+            </div>
+            <div className="investment-button-row">
+              <button className="portfolio-action" onClick={() => setSyncOpen(true)} type="button">
+                <RefreshCw size={16} />
+                <span>Revalue</span>
+              </button>
+              <button className="portfolio-action is-dark" onClick={() => setPeriodTab("monthly")} type="button">
+                <TrendingUp size={16} />
+                <span>Monthly</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      {syncOpen && (
+        <div className="modal-layer" role="presentation">
+          <form className="asset-sheet glass" onSubmit={saveAssets}>
+            <div className="sheet-header">
+              <div>
+                <span className="section-label">Weekly portfolio asset sync</span>
+                <h3>Override valuation cells</h3>
+              </div>
+              <button aria-label="Close asset sync" className="icon-button" type="button" onClick={() => setSyncOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <label className="asset-input">
+              <span>Mutual Funds · C16</span>
+              <input
+                inputMode="decimal"
+                type="number"
+                value={draftAssets.mutualFunds}
+                onChange={(event) => setDraftAssets((current) => ({ ...current, mutualFunds: event.target.value }))}
+              />
+            </label>
+
+            <label className="asset-input">
+              <span>Stocks · C17</span>
+              <input
+                inputMode="decimal"
+                type="number"
+                value={draftAssets.stocks}
+                onChange={(event) => setDraftAssets((current) => ({ ...current, stocks: event.target.value }))}
+              />
+            </label>
+
+            <button className="submit-button" type="submit">
+              {busy ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+              <span>Sync valuations</span>
+            </button>
+          </form>
+        </div>
+      )}
+
+      {activeGraphDetail && (
+        <div className="modal-layer graph-modal-layer" role="presentation">
+          <section aria-label={activeGraphDetail.title} className="graph-detail-sheet glass" role="dialog">
+            <div className="sheet-header">
+              <div>
+                <span className="section-label">{activeGraphDetail.eyebrow}</span>
+                <h3>{activeGraphDetail.title}</h3>
+              </div>
+              <button aria-label="Close graph detail" className="icon-button" type="button" onClick={() => setGraphModal(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="graph-detail-summary">
+              <div>
+                <span>Total shown</span>
+                <b>₹{formatMoney(activeGraphDetail.total)}</b>
+              </div>
+              <div>
+                <span>{activeGraphDetail.targetLabel}</span>
+                <b>{activeGraphDetail.targetValue}</b>
+              </div>
+              <div>
+                <span>Status</span>
+                <b>{activeGraphDetail.status}</b>
+              </div>
+            </div>
+
+            <div className="graph-detail-list no-scrollbar">
+              {activeGraphDetail.groups.length ? (
+                activeGraphDetail.groups.map((group) => (
+                  <article className="graph-detail-group" key={group.name}>
+                    <div className="graph-group-header">
+                      <div>
+                        <span>{group.name}</span>
+                        <b>₹{formatMoney(group.value)}</b>
+                      </div>
+                      <small>{group.logs.length} entries</small>
+                    </div>
+
+                    {group.categories?.length > 0 && (
+                      <div className="graph-category-strip">
+                        {group.categories.map((item) => (
+                          <span key={item.name}>
+                            {item.name} · ₹{formatMoney(item.value)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="graph-log-list">
+                      {group.logs.slice(0, 12).map((entry) => (
+                        <div className="graph-log-row" key={entry.id}>
+                          <div>
+                            <span>{entry.category}</span>
+                            <small>{entry.dateLabel} · {entry.accountName}</small>
+                            {entry.note && <p>{entry.note}</p>}
+                          </div>
+                          <b>₹{formatMoney(entry.amount)}</b>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <div className="empty-detail">No spends found for this view</div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function normalizeAssets(assets) {
+  return {
+    mutualFunds: Number(assets.mutualFunds || assets.mf || assets.mfVal || assets.C16 || 0),
+    stocks: Number(assets.stocks || assets.stocksVal || assets.C17 || 0),
+  };
+}
+
+function normalizeAccounts(accounts) {
+  return accounts.map((account, index) => ({
+    id: account.id || account.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `account-${index}`,
+    name: account.name || `Account ${index + 1}`,
+    type: account.type || "Other",
+    balance: Number(account.balance || account.value || 0),
+    updatedAt: account.updatedAt,
+  }));
+}
+
+function getAccountName(accounts, accountId) {
+  return accounts.find((account) => account.id === accountId)?.name || "Unassigned";
+}
+
+function getJournalMonthValue(transaction) {
+  const year = Number(transaction.year || 0);
+  const month = Number(transaction.monthNumber || 0);
+  if (!year || !month) return "";
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function buildJournalOptions(transactions, expenseCategories, incomeSources) {
+  const categories = [...new Set([...expenseCategories, ...incomeSources, ...transactions.map((transaction) => transaction.category).filter(Boolean)])].sort();
+  const monthMap = new Map();
+  const weeks = new Set();
+
+  transactions.forEach((transaction) => {
+    const monthValue = getJournalMonthValue(transaction);
+    if (monthValue && !monthMap.has(monthValue)) {
+      monthMap.set(monthValue, transaction.monthString || monthValue);
+    }
+    if (transaction.weekOfMonth) weeks.add(String(transaction.weekOfMonth));
+  });
+
+  return {
+    categories,
+    months: [...monthMap.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => b.value.localeCompare(a.value)),
+    weeks: [...weeks].sort((a, b) => Number(a) - Number(b)),
+  };
+}
+
+function filterJournalEntries(transactions, filters) {
+  const spendFilter = JOURNAL_SPEND_FILTERS.find((item) => item.id === filters.spend);
+  return transactions.filter((transaction) => {
+    if (filters.category !== "all" && transaction.category !== filters.category) return false;
+    if (filters.direction !== "all" && transaction.direction !== filters.direction) return false;
+    if (filters.month !== "all" && getJournalMonthValue(transaction) !== filters.month) return false;
+    if (filters.week !== "all" && String(transaction.weekOfMonth || "") !== filters.week) return false;
+    if (filters.noteMode === "with" && !transaction.note) return false;
+    if (filters.noteMode === "without" && transaction.note) return false;
+    if (spendFilter && spendFilter.id !== "all") {
+      const amount = Number(transaction.amount || 0);
+      if (spendFilter.min !== undefined && amount < spendFilter.min) return false;
+      if (spendFilter.max !== undefined && amount > spendFilter.max) return false;
+    }
+    return true;
+  });
+}
+
+function normalizeMetrics(data) {
+  const hasMetrics = ["totalBurn", "savingsRate", "unplanned"].some((key) => data[key] !== undefined);
+  if (!hasMetrics) return null;
+  return {
+    totalBurn: Number(data.totalBurn || 0),
+    savingsRate: Number(data.savingsRate || 0),
+    unplanned: Number(data.unplanned || 0),
+  };
+}
+
+function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, categories, budgets, recurringRules, allocationTargets = DEFAULT_ALLOCATION_TARGETS) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentWeek = getWeekOfMonth(now);
+  const expenseTransactions = transactions.filter((transaction) => transaction.direction !== "income");
+  const monthlyIncomeTransactions = transactions.filter(
+    (transaction) => transaction.direction === "income" && Number(transaction.monthNumber || 0) === currentMonth && Number(transaction.year || 0) === currentYear,
+  );
+  const monthlyExpenseTransactions = expenseTransactions.filter(
+    (transaction) => Number(transaction.monthNumber || 0) === currentMonth && Number(transaction.year || 0) === currentYear,
+  );
+  const matchesMetricPeriod = (transaction) => {
+    const transactionYear = Number(transaction.year || 0);
+    const transactionMonth = Number(transaction.monthNumber || 0);
+    const transactionWeek = Number(transaction.weekOfMonth || 1);
+    if (period === "yearly") return transactionYear === currentYear;
+    if (period === "weekly") return transactionYear === currentYear && transactionMonth === currentMonth && transactionWeek === currentWeek;
+    return transactionYear === currentYear && transactionMonth === currentMonth;
+  };
+  const metricExpenseTransactions = expenseTransactions.filter((transaction) => {
+    return matchesMetricPeriod(transaction);
+  });
+  const metricIncomeTransactions = transactions.filter((transaction) => {
+    if (transaction.direction !== "income") return false;
+    return matchesMetricPeriod(transaction);
+  });
+  const metricBudgetTarget =
+    period === "weekly"
+      ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
+      : Number(budgets.monthlyTotal || 0) * (period === "yearly" ? now.getMonth() + 1 : 1);
+  const totals = metricExpenseTransactions.reduce(
+    (memo, transaction) => {
+      const key = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
+      if (memo[key] === undefined) memo[key] = 0;
+      memo[key] += Number(transaction.amount || 0);
+      return memo;
+    },
+    { needs: 0, wants: 0, savings: 0 },
+  );
+  const total = totals.needs + totals.wants + totals.savings;
+  const monthlyIncome = monthlyIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const metricIncome = metricIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const allocationBase = metricIncome || total;
+  const computedTotalBurn = totals.needs + totals.wants;
+  const computedSavingsRate = allocationBase ? Math.round((totals.savings / allocationBase) * 100) : 0;
+  const computedUnplanned = Math.max(0, totals.wants - allocationBase * ((allocationTargets.wants || DEFAULT_ALLOCATION_TARGETS.wants) / 100));
+  const totalBurn = computedTotalBurn;
+  const savingsRate = computedSavingsRate;
+  const unplanned = computedUnplanned;
+  const allocations = {
+    needs: allocationBase ? Math.round((totals.needs / allocationBase) * 100) : 0,
+    wants: allocationBase ? Math.round((totals.wants / allocationBase) * 100) : 0,
+    savings: allocationBase ? Math.round((totals.savings / allocationBase) * 100) : 0,
+  };
+  const velocity = buildVelocity(expenseTransactions, period, now);
+  const chartTarget =
+    period === "weekly"
+      ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
+      : period === "yearly"
+        ? Number(budgets.monthlyTotal || 0) * (now.getMonth() + 1)
+        : Number(budgets.monthlyTotal || 0);
+  const latestBurnPoint = [...velocity].reverse().find((point) => Number(point.burn || 0) > 0) || velocity[velocity.length - 1] || { label: "Now", burn: 0 };
+  const chartVariance = Number(latestBurnPoint.burn || 0) - chartTarget;
+  const chartReadout = {
+    targetCopy:
+      period === "weekly"
+        ? "The dotted line is one quarter of the monthly budget, used as a week-by-week pacing target."
+        : period === "yearly"
+          ? "The dotted line is the year-to-date budget target across months elapsed this year."
+          : "The dotted line is the monthly budget target for each month in the year view.",
+    varianceLabel: chartVariance > 0 ? `Over ₹${formatMoney(chartVariance)}` : `Behind ₹${formatMoney(Math.abs(chartVariance))}`,
+    varianceCopy:
+      chartVariance > 0
+        ? `${latestBurnPoint.label} is above the target line at the current stage.`
+        : `${latestBurnPoint.label} is still below the target line at the current stage.`,
+  };
+  const categoryNames = [...new Set([...categories, ...expenseTransactions.map((transaction) => transaction.category).filter(Boolean)])];
+  const categoryProgress = categoryNames.map((name) => {
+    const spent = monthlyExpenseTransactions
+      .filter((transaction) => transaction.category === name)
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+    const limit = Number(budgets.categories[name] ?? getDefaultCategoryBudget(name));
+    const percent = limit ? Math.round((spent / limit) * 100) : 0;
+    const status = percent >= 100 ? "danger" : percent >= 80 ? "warn" : "calm";
+    return {
+      name,
+      spent,
+      limit,
+      percent,
+      status,
+      remaining: Math.max(0, limit - spent),
+      color: CATEGORY_COLORS[name] || "#8D99AE",
+    };
+  });
+  const categorySpends = categoryProgress
+    .map((slice) => ({
+      name: slice.name,
+      color: slice.color,
+      value: metricExpenseTransactions
+        .filter((transaction) => transaction.category === slice.name)
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+    }))
+    .filter((slice) => slice.value > 0);
+  const graphDetails = buildGraphDetails(expenseTransactions, metricExpenseTransactions, accounts, period, now);
+  const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
+  const monthlyBudgetSpent = categoryProgress.reduce((sum, item) => sum + item.spent, 0);
+  const overspend = Math.max(0, monthlyBudgetSpent - Number(budgets.monthlyTotal || 0));
+  const budgetRemaining = Math.max(0, metricBudgetTarget - computedTotalBurn);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const projectedBurn = now.getDate() ? Math.round((monthlyBudgetSpent / now.getDate()) * daysInMonth) : monthlyBudgetSpent;
+  const forecast = {
+    projectedBurn,
+    projectedOverspend: Math.max(0, projectedBurn - Number(budgets.monthlyTotal || 0)),
+    pace: budgets.monthlyTotal ? Math.round((projectedBurn / budgets.monthlyTotal) * 100) : 0,
+  };
+  const recurringMonthlyLoad = recurringRules.reduce((sum, rule) => sum + Number(rule.amount || 0) * (rule.frequency === "weekly" ? 4 : 1), 0);
+  const nextRecurring = recurringRules
+    .map((rule) => {
+      const nextDue = getNextDueDate(rule, now);
+      return { ...rule, nextDue, daysUntil: getDaysUntil(nextDue, now) };
+    })
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+  const nonZeroVelocity = velocity.filter((point) => point.burn > 0);
+  const currentPoint = nonZeroVelocity[nonZeroVelocity.length - 1] || { label: "Now", burn: 0 };
+  const previousPoint = nonZeroVelocity[nonZeroVelocity.length - 2] || { label: "Prior", burn: currentPoint.burn };
+  const trendDelta = currentPoint.burn - previousPoint.burn;
+  const trend = {
+    label: trendDelta > 0 ? "Rising" : trendDelta < 0 ? "Cooling" : "Flat",
+    copy:
+      trendDelta > 0
+        ? `${currentPoint.label} is ₹${formatMoney(Math.abs(trendDelta))} above ${previousPoint.label}.`
+        : trendDelta < 0
+          ? `${currentPoint.label} is ₹${formatMoney(Math.abs(trendDelta))} below ${previousPoint.label}.`
+          : `${currentPoint.label} is tracking level with ${previousPoint.label}.`,
+  };
+  const biggest = [...categoryProgress].sort((a, b) => b.spent - a.spent)[0] || { name: "No spends", spent: 0, percent: 0 };
+  const review = {
+    headline: overspend
+      ? `Budget exceeded by ₹${formatMoney(overspend)}`
+      : forecast.projectedOverspend
+        ? `Forecast risk: ₹${formatMoney(forecast.projectedOverspend)} over target`
+        : "Month is inside the command limit",
+    copy: `${biggest.name} is the largest category at ₹${formatMoney(biggest.spent)}. Recurring commitments represent ₹${formatMoney(recurringMonthlyLoad)} of planned monthly load.`,
+    biggestCategory: biggest.name,
+  };
+  const portfolioTotal = accounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const marketTotal =
+    accounts
+      .filter((account) => account.type === "Market")
+      .reduce((sum, account) => sum + Number(account.balance || 0), 0) ||
+    Number(assets.mutualFunds || 0) + Number(assets.stocks || 0);
+  const liquidityTotal = Math.max(0, portfolioTotal - marketTotal);
+  const marketShare = portfolioTotal ? Math.round((marketTotal / portfolioTotal) * 100) : 0;
+  const insightCards = [
+    {
+      label: "Forecast",
+      title: `Projected close ₹${formatMoney(forecast.projectedBurn)}`,
+      copy: forecast.projectedOverspend
+        ? `Current pace is ${forecast.pace}% of target and may exceed the monthly limit by ₹${formatMoney(forecast.projectedOverspend)}.`
+        : `Current pace is ${forecast.pace}% of target with ₹${formatMoney(budgetRemaining)} still available.`,
+      tone: forecast.projectedOverspend ? "is-warning" : "is-calm",
+    },
+    {
+      label: "Targets",
+      title: overspend ? `Overspent by ₹${formatMoney(overspend)}` : "Targets still intact",
+      copy: `${biggest.name} is at ${biggest.percent}% of its category limit. Use the category bars to rebalance before the month closes.`,
+      tone: overspend || biggest.percent >= 100 ? "is-danger" : "is-calm",
+    },
+    {
+      label: "Recurring",
+      title: nextRecurring[0] ? `${nextRecurring[0].name} due in ${nextRecurring[0].daysUntil}d` : "No reminders set",
+      copy: nextRecurring[0]
+        ? `Next scheduled outlay is ₹${formatMoney(nextRecurring[0].amount)} on ${nextRecurring[0].nextDue.toLocaleDateString("en-US", { month: "short", day: "numeric" })}.`
+        : "Add rent, SIPs, bills, and weekly repeats to make the forecast sharper.",
+      tone: "is-neutral",
+    },
+  ];
+  let alertTitle = "Context intelligence";
+  let alertCopy = `Tracked accounts hold ₹${formatMoney(portfolioTotal)} with market assets at ₹${formatMoney(marketTotal)}. Expense burn excludes income credits.`;
+  if (allocations.wants > allocationTargets.wants) {
+    alertTitle = "Wants allocation drift";
+    alertCopy = `Wants are running at ${allocations.wants}% against a ${allocationTargets.wants}% target. Life enjoyment, care, and subscription entries are creating the visible variance.`;
+  } else if (savingsRate < allocationTargets.savings) {
+    alertTitle = "Savings rate compression";
+    alertCopy = `Savings are at ${savingsRate}%, below the ${allocationTargets.savings}% marker. Logging an investment entry will rebalance the month.`;
+  } else if (forecast.projectedOverspend > 0) {
+    alertTitle = "Forecast limit breach";
+    alertCopy = `At this pace, the month may close ₹${formatMoney(forecast.projectedOverspend)} above the budget target.`;
+  }
+  return {
+    allocations,
+    allocationBase,
+    allocationTargets,
+    alertCopy,
+    alertTitle,
+    budgetRemaining,
+    categoryProgress,
+    categorySpends,
+    chartReadout,
+    chartTarget,
+    chartVariance,
+    displayLabel,
+    forecast,
+    graphDetails,
+    insightCards,
+    liquidityTotal,
+    marketShare,
+    marketTotal,
+    monthLabel,
+    monthlyIncome,
+    monthlyBudgetSpent,
+    nextRecurring,
+    overspend,
+    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Weekly",
+    portfolioTotal,
+    recurringMonthlyLoad,
+    review,
+    savingsRate,
+    totalBurn,
+    trend,
+    unplanned,
+    velocity,
+  };
+}
+
+function buildAnalyticsLegacy(transactions, accounts, assets, remoteMetrics, period, categories) {
+  const expenseTransactions = transactions.filter((transaction) => transaction.direction !== "income");
+  const totals = transactions.reduce(
+    (memo, transaction) => {
+      if (transaction.direction === "income") return memo;
+      const key = transaction.bucket.toLowerCase();
+      memo[key] += Number(transaction.amount || 0);
+      return memo;
+    },
+    { needs: 0, wants: 0, savings: 0 },
+  );
+  const total = totals.needs + totals.wants + totals.savings;
+  const computedTotalBurn = totals.needs + totals.wants;
+  const computedSavingsRate = total ? Math.round((totals.savings / total) * 100) : 0;
+  const wantTarget = total * 0.3;
+  const computedUnplanned = Math.max(0, totals.wants - wantTarget);
+  const totalBurn = remoteMetrics?.totalBurn ?? computedTotalBurn;
+  const savingsRate = remoteMetrics?.savingsRate ?? computedSavingsRate;
+  const unplanned = remoteMetrics?.unplanned ?? computedUnplanned;
+  const allocations = {
+    needs: total ? Math.round((totals.needs / total) * 100) : 0,
+    wants: total ? Math.round((totals.wants / total) * 100) : 0,
+    savings: total ? Math.max(0, 100 - Math.round((totals.needs / total) * 100) - Math.round((totals.wants / total) * 100)) : 0,
+  };
+  const velocity = buildVelocity(expenseTransactions, period);
+  const categoryNames = [...new Set([...categories, ...expenseTransactions.map((transaction) => transaction.category).filter(Boolean)])];
+  const categorySpends = categoryNames.map((name) => ({
+    name,
+    color: CATEGORY_COLORS[name] || "#8D99AE",
+    value: expenseTransactions
+      .filter((transaction) => transaction.category === name)
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+  })).filter((slice) => slice.value > 0);
+
+  const latest = transactions[0] ? new Date(transactions[0].timestamp) : new Date();
+  const monthLabel = latest.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const portfolioTotal = accounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const marketTotal =
+    accounts
+      .filter((account) => account.type === "Market")
+      .reduce((sum, account) => sum + Number(account.balance || 0), 0) ||
+    Number(assets.mutualFunds || 0) + Number(assets.stocks || 0);
+  const liquidityTotal = Math.max(0, portfolioTotal - marketTotal);
+  const marketShare = portfolioTotal ? Math.round((marketTotal / portfolioTotal) * 100) : 0;
+
+  let alertTitle = "Context intelligence";
+  let alertCopy = `Tracked accounts hold ₹${formatMoney(portfolioTotal)} with market assets at ₹${formatMoney(marketTotal)}. Expense burn excludes income credits.`;
+
+  if (allocations.wants > 30) {
+    alertTitle = "Wants allocation drift";
+    alertCopy = `Wants are running at ${allocations.wants}% against a 30% target. Food, care, and subscription entries are creating the visible variance.`;
+  } else if (savingsRate < 20) {
+    alertTitle = "Savings rate compression";
+    alertCopy = `Savings are at ${savingsRate}%, below the 20% marker. Logging an investment entry will rebalance the month.`;
+  } else if (velocity.some((point, index, list) => index > 0 && point.burn > list[index - 1].burn * 1.7)) {
+    alertTitle = "Weekly velocity spike";
+    alertCopy = "A recent week rose sharply above the prior burn profile. Check utilities, commuting, or dining entries before month close.";
+  }
+
+  return {
+    allocations,
+    alertCopy,
+    alertTitle,
+    categorySpends,
+    monthLabel,
+    liquidityTotal,
+    marketShare,
+    marketTotal,
+    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Weekly",
+    portfolioTotal,
+    savingsRate,
+    totalBurn,
+    unplanned,
+    velocity,
+  };
+}
+
+function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
+  const currentYear = anchorDate.getFullYear();
+  const currentMonth = anchorDate.getMonth() + 1;
+  if (period === "monthly") {
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return monthLabels.map((label, index) => ({
+      label,
+      burn: expenseTransactions
+        .filter((transaction) => Number(transaction.year || 0) === currentYear && Number(transaction.monthNumber || 0) === index + 1 && transaction.bucket !== "Savings")
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+    }));
+  }
+
+  if (period === "yearly") {
+    return [currentYear - 2, currentYear - 1, currentYear].map((year) => ({
+      label: String(year),
+      burn: expenseTransactions
+        .filter((transaction) => Number(transaction.year || 0) === year && transaction.bucket !== "Savings")
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+    }));
+  }
+
+  return [1, 2, 3, 4].map((week) => ({
+    label: `W${week}`,
+    burn: expenseTransactions
+      .filter(
+        (transaction) =>
+          Number(transaction.year || 0) === currentYear &&
+          Number(transaction.monthNumber || 0) === currentMonth &&
+          Number(transaction.weekOfMonth || 1) === week &&
+          transaction.bucket !== "Savings",
+      )
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+  }));
+}
+
+function getGraphDetailConfig(type, analytics) {
+  if (!type) return null;
+  const details = analytics.graphDetails || {};
+  if (type === "velocity") {
+    return {
+      eyebrow: `${analytics.periodLabel} velocity`,
+      title: `${analytics.periodLabel} burn breakdown`,
+      groups: details.velocity || [],
+      status: analytics.chartReadout.varianceLabel,
+      targetLabel: "Target line",
+      targetValue: `₹${formatMoney(analytics.chartTarget)}`,
+      total: (details.velocity || []).reduce((sum, group) => sum + Number(group.value || 0), 0),
+    };
+  }
+  if (type === "categories") {
+    const groups = details.categories || [];
+    return {
+      eyebrow: "Category spends",
+      title: "Spend details by category",
+      groups,
+      status: `${groups.length} active categories`,
+      targetLabel: "Period target",
+      targetValue: `₹${formatMoney(analytics.chartTarget)}`,
+      total: groups.reduce((sum, group) => sum + Number(group.value || 0), 0),
+    };
+  }
+  if (type === "allocations") {
+    const groups = details.allocations || [];
+    return {
+      eyebrow: "Needs / Wants / Savings",
+      title: "Allocation detail",
+      groups,
+      status: `${analytics.allocations.needs}/${analytics.allocations.wants}/${analytics.allocations.savings}%`,
+      targetLabel: "Target split",
+      targetValue: `${analytics.allocationTargets.needs}/${analytics.allocationTargets.wants}/${analytics.allocationTargets.savings}%`,
+      total: groups.reduce((sum, group) => sum + Number(group.value || 0), 0),
+    };
+  }
+  return null;
+}
+
+function buildGraphDetails(expenseTransactions, metricExpenseTransactions, accounts, period, anchorDate = new Date()) {
+  const velocityLabels = buildVelocity(expenseTransactions, period, anchorDate).map((point) => point.label);
+  const velocityTransactions = filterVelocityTransactions(expenseTransactions, period, anchorDate).filter((transaction) => transaction.bucket !== "Savings");
+  return {
+    velocity: buildTransactionGroups(velocityTransactions, accounts, (transaction) => getVelocityGroupLabel(transaction, period), velocityLabels),
+    categories: buildTransactionGroups(metricExpenseTransactions, accounts, (transaction) => transaction.category || "Uncategorized"),
+    allocations: buildTransactionGroups(
+      metricExpenseTransactions,
+      accounts,
+      (transaction) => String(transaction.bucket || getBucket(transaction.category)),
+      ["Needs", "Wants", "Savings"],
+    ),
+  };
+}
+
+function filterVelocityTransactions(expenseTransactions, period, anchorDate = new Date()) {
+  const currentYear = anchorDate.getFullYear();
+  const currentMonth = anchorDate.getMonth() + 1;
+  if (period === "yearly") {
+    return expenseTransactions.filter((transaction) => {
+      const year = Number(transaction.year || 0);
+      return year >= currentYear - 2 && year <= currentYear;
+    });
+  }
+  if (period === "monthly") {
+    return expenseTransactions.filter((transaction) => Number(transaction.year || 0) === currentYear);
+  }
+  return expenseTransactions.filter(
+    (transaction) => Number(transaction.year || 0) === currentYear && Number(transaction.monthNumber || 0) === currentMonth,
+  );
+}
+
+function getVelocityGroupLabel(transaction, period) {
+  if (period === "yearly") return String(transaction.year || "Unknown");
+  if (period === "monthly") {
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return monthLabels[Math.max(0, Number(transaction.monthNumber || 1) - 1)] || "Unknown";
+  }
+  return `W${Number(transaction.weekOfMonth || 1)}`;
+}
+
+function buildTransactionGroups(transactions, accounts, getGroupName, preferredOrder = []) {
+  const groups = new Map(preferredOrder.map((name) => [name, createGraphGroup(name)]));
+  transactions.forEach((transaction) => {
+    const groupName = getGroupName(transaction) || "Uncategorized";
+    if (!groups.has(groupName)) groups.set(groupName, createGraphGroup(groupName));
+    const group = groups.get(groupName);
+    const log = toGraphLog(transaction, accounts);
+    group.value += log.amount;
+    group.logs.push(log);
+    group.categoryTotals.set(log.category, (group.categoryTotals.get(log.category) || 0) + log.amount);
+  });
+
+  return [...groups.values()]
+    .filter((group) => group.value > 0)
+    .map((group) => ({
+      name: group.name,
+      value: group.value,
+      logs: group.logs.sort((a, b) => b.sortTime - a.sortTime),
+      categories: [...group.categoryTotals.entries()]
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value),
+    }));
+}
+
+function createGraphGroup(name) {
+  return {
+    name,
+    value: 0,
+    logs: [],
+    categoryTotals: new Map(),
+  };
+}
+
+function toGraphLog(transaction, accounts) {
+  const sortDate = new Date(transaction.timestamp || transaction.date || 0);
+  const dateLabel = Number.isNaN(sortDate.getTime())
+    ? transaction.date || "Undated"
+    : sortDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return {
+    id: transaction.id || `${transaction.category}-${transaction.amount}-${transaction.timestamp || transaction.date}`,
+    accountName: getAccountName(accounts, transaction.accountId),
+    amount: Number(transaction.amount || 0),
+    bucket: String(transaction.bucket || getBucket(transaction.category)),
+    category: transaction.category || "Uncategorized",
+    dateLabel,
+    note: transaction.note || "",
+    sortTime: Number.isNaN(sortDate.getTime()) ? 0 : sortDate.getTime(),
+  };
+}
+
+function TapToEditText({ value, onCommit }) {
+  const [draft, setDraft] = useState(value);
+  const [editing, setEditing] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const armTimer = useRef(null);
+  const lastTapAt = useRef(0);
+
+  useEffect(() => {
+    setDraft(value);
+    setEditing(false);
+    setArmed(false);
+  }, [value]);
+
+  useEffect(() => () => {
+    if (armTimer.current) window.clearTimeout(armTimer.current);
+  }, []);
+
+  function beginEdit() {
+    if (armTimer.current) window.clearTimeout(armTimer.current);
+    lastTapAt.current = 0;
+    setArmed(false);
+    setEditing(true);
+  }
+
+  function handleTap() {
+    const now = Date.now();
+    if (armed || now - lastTapAt.current < 700) {
+      beginEdit();
+      return;
+    }
+    lastTapAt.current = now;
+    setArmed(true);
+    if (armTimer.current) window.clearTimeout(armTimer.current);
+    armTimer.current = window.setTimeout(() => {
+      lastTapAt.current = 0;
+      setArmed(false);
+    }, 700);
+  }
+
+  function commit() {
+    const cleanDraft = draft.trim();
+    if (cleanDraft && cleanDraft !== value) onCommit(cleanDraft);
+    if (!cleanDraft) setDraft(value);
+    setEditing(false);
+    setArmed(false);
+  }
+
+  if (!editing) {
+    return (
+      <button
+        aria-label={`Tap twice to edit ${value}`}
+        className={`editable-display tap-edit-button ${armed ? "is-armed" : ""}`}
+        onClick={handleTap}
+        onDoubleClick={beginEdit}
+        type="button"
+      >
+        {value}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      className="editable-text"
+      value={draft}
+      onBlur={commit}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          setEditing(false);
+          setArmed(false);
+        }
+      }}
+    />
+  );
+}
+
+function EditableText({ value, onCommit, ...props }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  function commit() {
+    const cleanDraft = draft.trim();
+    if (cleanDraft && cleanDraft !== value) onCommit(cleanDraft);
+    if (!cleanDraft) setDraft(value);
+  }
+
+  return (
+    <input
+      {...props}
+      className="editable-text"
+      value={draft}
+      onBlur={commit}
+      onChange={(event) => setDraft(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function EditableNumber({ value, onCommit, ...props }) {
+  const [draft, setDraft] = useState(String(value ?? 0));
+
+  useEffect(() => {
+    setDraft(String(value ?? 0));
+  }, [value]);
+
+  function commit() {
+    const nextValue = Number(draft || 0);
+    if (Number.isFinite(nextValue) && nextValue !== Number(value || 0)) onCommit(nextValue);
+    if (!Number.isFinite(nextValue)) setDraft(String(value ?? 0));
+  }
+
+  return (
+    <input
+      {...props}
+      value={draft}
+      inputMode="decimal"
+      type="number"
+      onBlur={commit}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(String(value ?? 0));
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function MetricCard({ icon, label, value }) {
+  return (
+    <article className="metric-card glass">
+      <div className="metric-icon">{icon}</div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function AllocationLine({ label, target, value }) {
+  return (
+    <div className="allocation-line">
+      <span>{label}</span>
+      <b>{value}%</b>
+      <small>target {target}</small>
+    </div>
+  );
+}
+
+export default App;
