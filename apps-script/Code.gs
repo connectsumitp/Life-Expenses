@@ -2,6 +2,7 @@ var SPREADSHEET_ID = "1cxV5e54BYIHx9rl3jq8aLfTN0K5lWI4q6clhRIY-Ogk";
 
 var SHEETS = {
   accounts: "Accounts",
+  assets: "Assets",
   budgets: "Budgets",
   categories: "Categories",
   recurring: "Recurring",
@@ -9,10 +10,11 @@ var SHEETS = {
 };
 
 var HEADERS = {
-  accounts: ["id", "name", "type", "balance", "updatedAt"],
-  budgets: ["scope", "name", "limit"],
-  categories: ["name", "bucket"],
-  recurring: ["id", "name", "category", "amount", "frequency", "dueDay"],
+  accounts: ["id", "name", "type", "balance", "updatedAt", "userId"],
+  assets: ["mutualFunds", "stocks", "updatedAt", "userId"],
+  budgets: ["scope", "name", "limit", "userId"],
+  categories: ["name", "bucket", "userId"],
+  recurring: ["id", "name", "category", "amount", "frequency", "dueDay", "userId"],
   transactions: [
     "id",
     "timestamp",
@@ -32,12 +34,13 @@ var HEADERS = {
     "source",
     "type",
     "note",
+    "userId",
   ],
 };
 
-function doGet() {
+function doGet(e) {
   try {
-    return handleGet_();
+    return handleGet_(e);
   } catch (error) {
     return errorJson_(error);
   }
@@ -51,17 +54,20 @@ function doPost(e) {
   }
 }
 
-function handleGet_() {
+function handleGet_(e) {
   var ss = getWorkbook_();
+  var userId = getRequestUserId_(e);
   var mainSheet = ss.getSheets()[0];
   var transactionsSheet = ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
   var accountsSheet = ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts);
+  var assetsSheet = ensureSheet_(ss, SHEETS.assets, HEADERS.assets);
   var categoriesSheet = ensureSheet_(ss, SHEETS.categories, HEADERS.categories);
   var budgetsSheet = ensureSheet_(ss, SHEETS.budgets, HEADERS.budgets);
   var recurringSheet = ensureSheet_(ss, SHEETS.recurring, HEADERS.recurring);
-  var transactions = readObjects_(transactionsSheet);
-  var accounts = normalizeAccounts_(readObjects_(accountsSheet));
-  var categories = normalizeCategories_(readObjects_(categoriesSheet), {});
+  var transactions = filterByUser_(readObjects_(transactionsSheet), userId);
+  var accounts = normalizeAccounts_(filterByUser_(readObjects_(accountsSheet), userId));
+  var assets = readUserAssets_(assetsSheet, userId, mainSheet);
+  var categories = normalizeCategories_(filterByUser_(readObjects_(categoriesSheet), userId), {});
   var categoryBuckets = toBucketMap_(categories);
   var returnedTransactions = [];
 
@@ -75,15 +81,12 @@ function handleGet_() {
     accounts: accounts,
     categories: categories,
     categoryBuckets: categoryBuckets,
-    budgets: readBudgets_(readObjects_(budgetsSheet)),
-    recurringRules: normalizeRecurring_(readObjects_(recurringSheet)),
-    assets: {
-      mutualFunds: Number(mainSheet.getRange("C16").getValue() || 0),
-      stocks: Number(mainSheet.getRange("C17").getValue() || 0),
-    },
+    budgets: readBudgets_(filterByUser_(readObjects_(budgetsSheet), userId)),
+    recurringRules: normalizeRecurring_(filterByUser_(readObjects_(recurringSheet), userId)),
+    assets: assets,
     cells: {
-      C16: mainSheet.getRange("C16").getValue(),
-      C17: mainSheet.getRange("C17").getValue(),
+      C16: assets.mutualFunds,
+      C17: assets.stocks,
     },
     totalBurn: buildMetrics_(transactions).totalBurn,
     savingsRate: buildMetrics_(transactions).savingsRate,
@@ -95,55 +98,59 @@ function handlePost_(e) {
   var payload = parsePayload_(e);
   var action = payload.action;
   var ss = getWorkbook_();
+  var userId = normalizeUserId_(payload.userId);
 
   if (action === "saveCategories") {
     var categories = normalizeCategories_(payload.categories, payload.categoryBuckets || {});
-    writeObjects_(ensureSheet_(ss, SHEETS.categories, HEADERS.categories), HEADERS.categories, categories);
+    writeUserObjects_(ensureSheet_(ss, SHEETS.categories, HEADERS.categories), HEADERS.categories, categories, userId);
     return json_({ ok: true, action: action, categories: categories, categoryBuckets: toBucketMap_(categories) });
   }
 
   if (action === "saveAccounts") {
     var accounts = normalizeAccounts_(payload.accounts);
-    writeObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts);
+    writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts, userId);
     return json_({ ok: true, action: action, accounts: accounts });
   }
 
   if (action === "saveBudgets") {
     var budgets = normalizeBudgets_(payload.budgets || payload);
-    writeObjects_(ensureSheet_(ss, SHEETS.budgets, HEADERS.budgets), HEADERS.budgets, budgetRows_(budgets));
+    writeUserObjects_(ensureSheet_(ss, SHEETS.budgets, HEADERS.budgets), HEADERS.budgets, budgetRows_(budgets), userId);
     return json_({ ok: true, action: action, budgets: budgets });
   }
 
   if (action === "saveRecurring") {
     var recurringRules = normalizeRecurring_(payload.recurringRules || payload.rules);
-    writeObjects_(ensureSheet_(ss, SHEETS.recurring, HEADERS.recurring), HEADERS.recurring, recurringRules);
+    writeUserObjects_(ensureSheet_(ss, SHEETS.recurring, HEADERS.recurring), HEADERS.recurring, recurringRules, userId);
     return json_({ ok: true, action: action, recurringRules: recurringRules });
   }
 
   if (action === "addExpense" || action === "addIncome") {
     var direction = action === "addIncome" ? "income" : "expense";
     var row = normalizeTransaction_(payload, direction);
+    row.userId = userId;
     appendObject_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), HEADERS.transactions, row);
     if (Array.isArray(payload.accounts)) {
       var nextAccounts = normalizeAccounts_(payload.accounts);
-      writeObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, nextAccounts);
+      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, nextAccounts, userId);
     }
     return json_({ ok: true, action: action, transaction: row });
   }
 
   if (action === "updateGroww") {
-    var mainSheet = ss.getSheets()[0];
     var cells = payload.cells || {};
     var mf = Number(payload.mf || payload.mutualFunds || cells.C16 || 0);
     var stocks = Number(payload.stocks || payload.stocksVal || cells.C17 || 0);
-    mainSheet.getRange("C16").setValue(mf);
-    mainSheet.getRange("C17").setValue(stocks);
+    writeUserObjects_(ensureSheet_(ss, SHEETS.assets, HEADERS.assets), HEADERS.assets, [{
+      mutualFunds: mf,
+      stocks: stocks,
+      updatedAt: isoString_(new Date()),
+    }], userId);
     return json_({ ok: true, action: action, assets: { mutualFunds: mf, stocks: stocks } });
   }
 
   if (action === "updateAssetSource") {
     if (payload.account) {
-      upsertAccount_(ss, payload.account);
+      upsertAccount_(ss, payload.account, userId);
     }
     return json_({ ok: true, action: action, account: payload.account || null });
   }
@@ -162,6 +169,36 @@ function parsePayload_(e) {
   } catch (error) {
     return {};
   }
+}
+
+function getRequestUserId_(e) {
+  var params = (e && e.parameter) || {};
+  return normalizeUserId_(params.userId || params.user || "");
+}
+
+function normalizeUserId_(value) {
+  var clean = String(value || "").trim();
+  return clean || "default-user";
+}
+
+function isoString_(date) {
+  var safeDate = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+  if (safeDate.toISOString) {
+    return safeDate.toISOString();
+  }
+  return Utilities.formatDate(safeDate, "Etc/UTC", "yyyy-MM-dd'T'HH:mm:ss'Z'");
+}
+
+function testFinanceCommandCenterSetup() {
+  var ss = getWorkbook_();
+  ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
+  ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts);
+  ensureSheet_(ss, SHEETS.assets, HEADERS.assets);
+  ensureSheet_(ss, SHEETS.categories, HEADERS.categories);
+  ensureSheet_(ss, SHEETS.budgets, HEADERS.budgets);
+  ensureSheet_(ss, SHEETS.recurring, HEADERS.recurring);
+  Logger.log("Finance Command Center Apps Script setup OK");
+  return true;
 }
 
 function ensureSheet_(ss, name, headers) {
@@ -235,6 +272,41 @@ function writeObjects_(sheet, headers, rows) {
   sheet.getRange(2, 1, values.length, headers.length).setValues(values);
 }
 
+function filterByUser_(rows, userId) {
+  var target = normalizeUserId_(userId);
+  var output = [];
+  for (var i = 0; i < rows.length; i += 1) {
+    var row = rows[i] || {};
+    if (normalizeUserId_(row.userId) === target) output.push(row);
+  }
+  return output;
+}
+
+function withUserId_(rows, userId) {
+  var target = normalizeUserId_(userId);
+  var output = [];
+  for (var i = 0; i < rows.length; i += 1) {
+    var row = {};
+    var source = rows[i] || {};
+    for (var key in source) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) row[key] = source[key];
+    }
+    row.userId = target;
+    output.push(row);
+  }
+  return output;
+}
+
+function writeUserObjects_(sheet, headers, rows, userId) {
+  var target = normalizeUserId_(userId);
+  var existing = readObjects_(sheet);
+  var retained = [];
+  for (var i = 0; i < existing.length; i += 1) {
+    if (normalizeUserId_(existing[i].userId) !== target) retained.push(existing[i]);
+  }
+  writeObjects_(sheet, headers, retained.concat(withUserId_(rows || [], target)));
+}
+
 function appendObject_(sheet, headers, row) {
   var values = [];
   for (var i = 0; i < headers.length; i += 1) {
@@ -274,11 +346,25 @@ function normalizeAccounts_(accounts) {
       name: name,
       type: account.type || "Other",
       balance: Number(account.balance || account.value || 0),
-      updatedAt: account.updatedAt || new Date().toISOString(),
+      updatedAt: account.updatedAt || isoString_(new Date()),
     });
   }
 
   return output;
+}
+
+function readUserAssets_(sheet, userId, mainSheet) {
+  var rows = filterByUser_(readObjects_(sheet), userId);
+  if (rows.length) {
+    return {
+      mutualFunds: Number(rows[0].mutualFunds || 0),
+      stocks: Number(rows[0].stocks || 0),
+    };
+  }
+  return {
+    mutualFunds: Number(mainSheet.getRange("C16").getValue() || 0),
+    stocks: Number(mainSheet.getRange("C17").getValue() || 0),
+  };
 }
 
 function normalizeBudgets_(budgets) {
@@ -368,7 +454,7 @@ function normalizeTransaction_(payload, direction) {
   var timeZone = Session.getScriptTimeZone();
   return {
     id: payload.id || String(now.getTime()),
-    timestamp: now.toISOString(),
+    timestamp: isoString_(now),
     date: payload.date || Utilities.formatDate(now, timeZone, "yyyy-MM-dd"),
     dayString: payload.dayString || Utilities.formatDate(now, timeZone, "EEE"),
     monthString: payload.monthString || Utilities.formatDate(now, timeZone, "MMM yyyy"),
@@ -388,9 +474,9 @@ function normalizeTransaction_(payload, direction) {
   };
 }
 
-function upsertAccount_(ss, account) {
+function upsertAccount_(ss, account, userId) {
   var sheet = ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts);
-  var accounts = normalizeAccounts_(readObjects_(sheet));
+  var accounts = normalizeAccounts_(filterByUser_(readObjects_(sheet), userId));
   var normalized = normalizeAccounts_([account])[0];
   var found = false;
 
@@ -403,7 +489,7 @@ function upsertAccount_(ss, account) {
   }
 
   if (!found) accounts.unshift(normalized);
-  writeObjects_(sheet, HEADERS.accounts, accounts);
+  writeUserObjects_(sheet, HEADERS.accounts, accounts, userId);
 }
 
 function toBucketMap_(categories) {

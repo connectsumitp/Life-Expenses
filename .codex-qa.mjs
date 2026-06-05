@@ -174,6 +174,7 @@ function stubScript() {
         localStorage.removeItem("life-expenses.accounts");
         localStorage.removeItem("life-expenses.categoryBuckets");
         localStorage.removeItem("life-expenses.expenseCategories");
+        localStorage.setItem("life-expenses.userProfile", JSON.stringify({ email: "uat@example.com", privateKey: "uat-key", identity: "uat@example.com::uat-key", label: "uat", userId: "user-uat" }));
       } catch {}
       const nativeFetch = window.fetch.bind(window);
       window.fetch = async (input, init = {}) => {
@@ -530,6 +531,7 @@ async function runInteractionTests(cdp) {
   const expenseLogged = await evalInPage(cdp, `
     (() => ({
       posted: window.__uatPosts.some((post) => post.action === "addExpense" && Number(post.amount) === 321 && post.note === "UAT expense note"),
+      postedUser: window.__uatPosts.find((post) => post.action === "addExpense" && Number(post.amount) === 321)?.userId || "",
       postedDate: window.__uatPosts.find((post) => post.action === "addExpense" && Number(post.amount) === 321)?.date || "",
       postedMonth: window.__uatPosts.find((post) => post.action === "addExpense" && Number(post.amount) === 321)?.monthString || "",
       amountCleared: document.querySelector(".amount-field input").value === "",
@@ -538,7 +540,7 @@ async function runInteractionTests(cdp) {
       recentTop: document.querySelector(".recent-list .transaction-row")?.innerText || "",
     }))()
   `);
-  record("expense log posts selected date and clears fields", expenseLogged.posted && expenseLogged.postedDate === "2026-07-20" && expenseLogged.postedMonth === "Jul 2026" && expenseLogged.amountCleared && expenseLogged.dateReset && expenseLogged.noteCleared, JSON.stringify(expenseLogged));
+  record("expense log posts selected date user and clears fields", expenseLogged.posted && expenseLogged.postedUser === "user-uat" && expenseLogged.postedDate === "2026-07-20" && expenseLogged.postedMonth === "Jul 2026" && expenseLogged.amountCleared && expenseLogged.dateReset && expenseLogged.noteCleared, JSON.stringify(expenseLogged));
 
   await evalInPage(cdp, `document.querySelector(".entry-tab[aria-selected='false']").click()`);
   await wait(250);

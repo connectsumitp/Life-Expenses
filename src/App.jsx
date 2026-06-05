@@ -153,7 +153,35 @@ const STORAGE_KEYS = {
   categoryBuckets: "life-expenses.categoryBuckets",
   expenseCategories: "life-expenses.expenseCategories",
   recurringRules: "life-expenses.recurringRules",
+  userProfile: "life-expenses.userProfile",
 };
+
+function makeUserId(identity) {
+  const source = String(identity || "").trim().toLowerCase();
+  let hash = 5381;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) + hash) ^ source.charCodeAt(index);
+  }
+  return `user-${Math.abs(hash).toString(36)}`;
+}
+
+function normalizeUserProfile(profile) {
+  const email = String(profile?.email || "").trim().toLowerCase();
+  const privateKey = String(profile?.privateKey || "").trim();
+  const identity = email && privateKey ? `${email}::${privateKey}` : "";
+  if (!identity) return null;
+  return {
+    identity,
+    email,
+    privateKey,
+    label: profile.label || email.split("@")[0] || "Personal workspace",
+    userId: profile.userId || makeUserId(identity),
+  };
+}
+
+function getScopedStorageKey(key, userId) {
+  return userId ? `${key}.${userId}` : key;
+}
 
 function getDateInputValue(date = new Date()) {
   const safeDate = new Date(date);
@@ -229,9 +257,11 @@ function makeEntry(amount, category, direction = "expense", accountId = "sbi", s
   };
 }
 
-async function apiGetDashboard() {
+async function apiGetDashboard(userId) {
   if (!APPS_SCRIPT_URL) return null;
-  const response = await fetch(APPS_SCRIPT_URL, {
+  const url = new URL(APPS_SCRIPT_URL);
+  if (userId) url.searchParams.set("userId", userId);
+  const response = await fetch(url.toString(), {
     method: "GET",
     cache: "no-store",
   });
@@ -239,12 +269,12 @@ async function apiGetDashboard() {
   return response.json();
 }
 
-async function apiPost(action, payload) {
+async function apiPost(action, payload, userId) {
   if (!APPS_SCRIPT_URL) return null;
   const response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, ...payload }),
+    body: JSON.stringify({ action, userId, ...payload }),
   });
   if (!response.ok) throw new Error(`${action} write failed`);
   return response.json();
@@ -384,20 +414,24 @@ function evaluateAmountExpression(expression) {
 }
 
 function App() {
+  const [userProfile, setUserProfile] = useState(() => normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null)));
+  const [userEmailDraft, setUserEmailDraft] = useState(() => userProfile?.email || "");
+  const [userKeyDraft, setUserKeyDraft] = useState(() => userProfile?.privateKey || "");
+  const activeUserId = userProfile?.userId || "";
   const [entryMode, setEntryMode] = useState("expense");
   const [amount, setAmount] = useState("");
   const [entryDate, setEntryDate] = useState(() => getDateInputValue());
   const [graphModal, setGraphModal] = useState(null);
   const [note, setNote] = useState("");
-  const [expenseCategories, setExpenseCategories] = useState(() => readStoredValue(STORAGE_KEYS.expenseCategories, DEFAULT_CATEGORIES));
+  const [expenseCategories, setExpenseCategories] = useState(() => readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), DEFAULT_CATEGORIES));
   const [categoryBuckets, setCategoryBuckets] = useState(() =>
-    readStoredValue(STORAGE_KEYS.categoryBuckets, Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))),
+    readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, activeUserId), Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))),
   );
   const [incomeSources, setIncomeSources] = useState(DEFAULT_INCOME_SOURCES);
   const [category, setCategory] = useState("");
   const [incomeSource, setIncomeSource] = useState(DEFAULT_INCOME_SOURCES[0]);
   const [selectedAccount, setSelectedAccount] = useState(DEFAULT_ACCOUNTS[0].id);
-  const [accounts, setAccounts] = useState(() => normalizeAccounts(readStoredValue(STORAGE_KEYS.accounts, DEFAULT_ACCOUNTS)));
+  const [accounts, setAccounts] = useState(() => normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
   const [assetName, setAssetName] = useState("");
   const [assetType, setAssetType] = useState("Bank");
   const [detailTab, setDetailTab] = useState("accounts");
@@ -411,12 +445,12 @@ function App() {
   const [journalNoteMode, setJournalNoteMode] = useState("all");
   const [transactions, setTransactions] = useState(DEMO_TRANSACTIONS);
   const [assets, setAssets] = useState({ mutualFunds: 126000, stocks: 72500 });
-  const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(STORAGE_KEYS.allocationTargets, DEFAULT_ALLOCATION_TARGETS)));
-  const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, readStoredValue(STORAGE_KEYS.budgets, DEFAULT_BUDGETS)));
-  const [budgetSetupComplete, setBudgetSetupComplete] = useState(() => readStoredValue(STORAGE_KEYS.budgetSetupComplete, false));
-  const [budgetSetupOpen, setBudgetSetupOpen] = useState(() => !readStoredValue(STORAGE_KEYS.budgetSetupComplete, false));
+  const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), DEFAULT_ALLOCATION_TARGETS)));
+  const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), DEFAULT_BUDGETS)));
+  const [budgetSetupComplete, setBudgetSetupComplete] = useState(() => readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false));
+  const [budgetSetupOpen, setBudgetSetupOpen] = useState(() => !readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false));
   const [recurringRules, setRecurringRules] = useState(() =>
-    normalizeRecurringRules(readStoredValue(STORAGE_KEYS.recurringRules, DEFAULT_RECURRING_RULES), expenseCategories),
+    normalizeRecurringRules(readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, activeUserId), DEFAULT_RECURRING_RULES), expenseCategories),
   );
   const [recurringSetupOpen, setRecurringSetupOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -434,9 +468,9 @@ function App() {
   useEffect(() => {
     let alive = true;
     async function hydrate() {
-      if (!APPS_SCRIPT_URL) return;
+      if (!APPS_SCRIPT_URL || !activeUserId) return;
       try {
-        const data = await apiGetDashboard();
+        const data = await apiGetDashboard(activeUserId);
         if (!alive || !data) return;
         if (Array.isArray(data.transactions)) {
           setTransactions(data.transactions.map((transaction) => ({
@@ -475,19 +509,38 @@ function App() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [activeUserId]);
+
+  useEffect(() => {
+    if (!userProfile) return;
+    const nextCategories = readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, userProfile.userId), DEFAULT_CATEGORIES);
+    writeStoredValue(STORAGE_KEYS.userProfile, userProfile);
+    setTransactions([]);
+    setExpenseCategories(nextCategories);
+    setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
+    setAccounts(normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, userProfile.userId), DEFAULT_ACCOUNTS)));
+    setBudgets(normalizeBudgets(nextCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, userProfile.userId), DEFAULT_BUDGETS)));
+    setBudgetSetupComplete(readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
+    setBudgetSetupOpen(!readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
+    setAllocationTargets(normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, userProfile.userId), DEFAULT_ALLOCATION_TARGETS)));
+    setRecurringRules(normalizeRecurringRules(readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, userProfile.userId), DEFAULT_RECURRING_RULES), nextCategories));
+    setCategory("");
+    setSelectedAccount(DEFAULT_ACCOUNTS[0].id);
+  }, [userProfile?.userId]);
 
   useEffect(() => {
     setDraftAssets(assets);
   }, [assets]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.expenseCategories, expenseCategories);
-  }, [expenseCategories]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), expenseCategories);
+  }, [expenseCategories, activeUserId]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.categoryBuckets, categoryBuckets);
-  }, [categoryBuckets]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, activeUserId), categoryBuckets);
+  }, [categoryBuckets, activeUserId]);
 
   useEffect(() => {
     setBudgets((current) => normalizeBudgets(expenseCategories, current));
@@ -495,24 +548,29 @@ function App() {
   }, [expenseCategories]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.budgets, budgets);
-  }, [budgets]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), budgets);
+  }, [budgets, activeUserId]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.budgetSetupComplete, budgetSetupComplete);
-  }, [budgetSetupComplete]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), budgetSetupComplete);
+  }, [budgetSetupComplete, activeUserId]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.allocationTargets, allocationTargets);
-  }, [allocationTargets]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), allocationTargets);
+  }, [allocationTargets, activeUserId]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.recurringRules, recurringRules);
-  }, [recurringRules]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, activeUserId), recurringRules);
+  }, [recurringRules, activeUserId]);
 
   useEffect(() => {
-    writeStoredValue(STORAGE_KEYS.accounts, accounts);
-  }, [accounts]);
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), accounts);
+  }, [accounts, activeUserId]);
 
   const analytics = useMemo(
     () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets),
@@ -584,9 +642,9 @@ function App() {
   }
 
   async function syncDashboard(silent = true) {
-    if (!APPS_SCRIPT_URL) return;
+    if (!APPS_SCRIPT_URL || !activeUserId) return;
     try {
-      const data = await apiGetDashboard();
+      const data = await apiGetDashboard(activeUserId);
       applyDashboardData(data);
       if (!silent) setStatus("Updated");
     } catch {
@@ -595,8 +653,10 @@ function App() {
   }
 
   async function saveCategoriesToBridge(nextCategories, nextBuckets) {
-    writeStoredValue(STORAGE_KEYS.expenseCategories, nextCategories);
-    writeStoredValue(STORAGE_KEYS.categoryBuckets, nextBuckets);
+    if (activeUserId) {
+      writeStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), nextCategories);
+      writeStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, activeUserId), nextBuckets);
+    }
     if (!APPS_SCRIPT_URL) return;
     try {
       await apiPost("saveCategories", {
@@ -605,7 +665,7 @@ function App() {
           bucket: nextBuckets[name] || getBucket(name),
         })),
         categoryBuckets: nextBuckets,
-      });
+      }, activeUserId);
       setStatus("Categories synced");
     } catch {
       setStatus("Categories saved locally, bridge failed");
@@ -613,10 +673,10 @@ function App() {
   }
 
   async function saveAccountsToBridge(nextAccounts) {
-    writeStoredValue(STORAGE_KEYS.accounts, nextAccounts);
+    if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), nextAccounts);
     if (!APPS_SCRIPT_URL) return;
     try {
-      await apiPost("saveAccounts", { accounts: nextAccounts });
+      await apiPost("saveAccounts", { accounts: nextAccounts }, activeUserId);
       setStatus("Accounts synced");
     } catch {
       setStatus("Accounts saved locally, bridge failed");
@@ -624,20 +684,20 @@ function App() {
   }
 
   async function saveBudgetsToBridge(nextBudgets) {
-    writeStoredValue(STORAGE_KEYS.budgets, nextBudgets);
+    if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), nextBudgets);
     if (!APPS_SCRIPT_URL) return;
     try {
-      await apiPost("saveBudgets", { budgets: nextBudgets });
+      await apiPost("saveBudgets", { budgets: nextBudgets }, activeUserId);
     } catch {
       setStatus("Budgets saved locally, bridge failed");
     }
   }
 
   async function saveRecurringToBridge(nextRules) {
-    writeStoredValue(STORAGE_KEYS.recurringRules, nextRules);
+    if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, activeUserId), nextRules);
     if (!APPS_SCRIPT_URL) return;
     try {
-      await apiPost("saveRecurring", { recurringRules: nextRules });
+      await apiPost("saveRecurring", { recurringRules: nextRules }, activeUserId);
     } catch {
       setStatus("Recurring saved locally, bridge failed");
     }
@@ -674,7 +734,7 @@ function App() {
   function completeBudgetSetup() {
     setBudgetSetupComplete(true);
     setBudgetSetupOpen(false);
-    writeStoredValue(STORAGE_KEYS.budgetSetupComplete, true);
+    if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), true);
   }
 
   function reopenBudgetSetup() {
@@ -724,6 +784,26 @@ function App() {
     window.setTimeout(() => {
       setRipples((current) => current.filter((ripple) => ripple.id !== id));
     }, 900);
+  }
+
+  function saveUserWorkspace(event) {
+    event.preventDefault();
+    const profile = normalizeUserProfile({ email: userEmailDraft, privateKey: userKeyDraft });
+    if (!profile) {
+      setStatus("Enter email and private key");
+      return;
+    }
+    setUserProfile(profile);
+    setUserEmailDraft(profile.email);
+    setUserKeyDraft(profile.privateKey);
+    setStatus("Workspace loaded");
+  }
+
+  function switchWorkspace() {
+    setUserProfile(null);
+    setUserEmailDraft(userProfile?.email || "");
+    setUserKeyDraft(userProfile?.privateKey || "");
+    setStatus("Choose workspace");
   }
 
   function pushUndo(label, undo) {
@@ -978,7 +1058,7 @@ function App() {
           account,
           amount: numericAmount,
           timestamp: new Date().toISOString(),
-        });
+        }, activeUserId);
         await syncDashboard(true);
         setStatus(APPS_SCRIPT_URL ? "Asset source synced" : "Asset saved locally");
       } catch {
@@ -1007,7 +1087,7 @@ function App() {
         account: selectedAccountLabel,
         accountId: selectedAccount,
         accounts: nextAccounts,
-      })
+      }, activeUserId)
       .then(() => {
         setStatus(APPS_SCRIPT_URL ? `${direction === "expense" ? "Expense" : "Income"} synced` : "Saved locally");
       })
@@ -1040,7 +1120,7 @@ function App() {
       return account;
     });
     try {
-      await apiPost("updateGroww", payload);
+      await apiPost("updateGroww", payload, activeUserId);
       setAssets(payload.valuations);
       setAccounts(syncedAccounts);
       await saveAccountsToBridge(syncedAccounts);
@@ -1070,6 +1150,43 @@ function App() {
           <i className="tap-ripple" key={ripple.id} style={{ left: ripple.x, top: ripple.y }} />
         ))}
       </div>
+
+      {!userProfile && (
+        <div className="modal-layer user-gate-layer" role="presentation">
+          <form className="user-gate glass" onSubmit={saveUserWorkspace}>
+            <div>
+              <span className="section-label">Private workspace</span>
+              <h2>Open your finance command center</h2>
+              <p>Use the same email and private key together every time. Entries in the shared Google Sheet stay separated by this combined workspace ID.</p>
+            </div>
+            <label className="asset-input">
+              <span>Email</span>
+              <input
+                autoFocus
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={userEmailDraft}
+                onChange={(event) => setUserEmailDraft(event.target.value)}
+              />
+            </label>
+            <label className="asset-input">
+              <span>Private key</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                placeholder="my-private-key"
+                value={userKeyDraft}
+                onChange={(event) => setUserKeyDraft(event.target.value)}
+              />
+            </label>
+            <button className="submit-button" type="submit">
+              <Check size={18} />
+              <span>Enter workspace</span>
+            </button>
+          </form>
+        </div>
+      )}
 
       <section className="journal-panel glass">
         <div className="panel-kicker">
@@ -1476,6 +1593,10 @@ function App() {
             <button className="sync-button" type="button" onClick={() => setSyncOpen(true)}>
               <RefreshCw size={17} />
               <span>Asset sync</span>
+            </button>
+            <button className="sync-button user-chip" type="button" onClick={switchWorkspace}>
+              <WalletCards size={17} />
+              <span>{userProfile ? "Workspace" : "Connect"}</span>
             </button>
           </div>
         </header>
