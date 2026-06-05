@@ -489,6 +489,8 @@ function App() {
   const [amount, setAmount] = useState("");
   const [entryDate, setEntryDate] = useState(() => getDateInputValue());
   const [graphModal, setGraphModal] = useState(null);
+  const [mobilePage, setMobilePage] = useState("log");
+  const [mobileJournalOpen, setMobileJournalOpen] = useState(false);
   const [note, setNote] = useState("");
   const [expenseCategories, setExpenseCategories] = useState(() => readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), DEFAULT_CATEGORIES));
   const [categoryBuckets, setCategoryBuckets] = useState(() =>
@@ -1220,7 +1222,7 @@ function App() {
   const today = new Date();
 
   return (
-    <main className="app" onClick={handleTap} onPointerMove={handlePointerMove}>
+    <main className={`app mobile-${mobilePage} ${mobileJournalOpen ? "mobile-journal-open" : ""}`} onClick={handleTap} onPointerMove={handlePointerMove}>
       <div className="bubble-field" aria-hidden="true">
         {Array.from({ length: 13 }).map((_, index) => (
           <span className={`bubble bubble-${index + 1}`} key={index} />
@@ -1566,13 +1568,17 @@ function App() {
           </button>
         </form>
 
-        <div className="recent-stack">
+        <div className={`recent-stack ${mobileJournalOpen ? "is-open" : ""}`}>
           <div className="journal-filter-head">
             <div>
               <span className="section-label">Recent journal marks</span>
               <strong>₹{formatMoney(journalSpendTotal)}</strong>
             </div>
-            <span>{filteredJournalEntries.length} shown</span>
+            <button className="mobile-section-toggle" onClick={() => setMobileJournalOpen((open) => !open)} type="button">
+              <span>{filteredJournalEntries.length} shown</span>
+              <ChevronDown size={15} />
+            </button>
+            <span className="journal-count">{filteredJournalEntries.length} shown</span>
           </div>
           <div className="journal-filters" aria-label="Journal filters">
             <label>
@@ -2387,6 +2393,17 @@ function App() {
           </div>
         </section>
       </section>
+
+      <nav className="mobile-shell-nav" aria-label="Mobile workspace pages">
+        <button className={mobilePage === "log" ? "is-active" : ""} onClick={() => setMobilePage("log")} type="button">
+          <Send size={16} />
+          <span>Log</span>
+        </button>
+        <button className={mobilePage === "dashboard" ? "is-active" : ""} onClick={() => setMobilePage("dashboard")} type="button">
+          <TrendingUp size={16} />
+          <span>Dashboard</span>
+        </button>
+      </nav>
 
       {syncOpen && (
         <div className="modal-layer" role="presentation">

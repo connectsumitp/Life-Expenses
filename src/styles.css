@@ -90,6 +90,11 @@ button:active {
   mask-image: radial-gradient(circle at center, black, transparent 78%);
 }
 
+.mobile-shell-nav,
+.mobile-section-toggle {
+  display: none;
+}
+
 .bubble-field {
   position: absolute;
   inset: 0;
@@ -2718,8 +2723,51 @@ button:active {
 @media (max-width: 640px) {
   .app {
     padding: 10px;
+    padding-bottom: 78px;
     gap: 10px;
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
+  }
+
+  .app.mobile-log .dashboard-panel,
+  .app.mobile-dashboard .journal-panel {
+    display: none;
+  }
+
+  .mobile-shell-nav {
+    position: fixed;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    z-index: 8;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    border: 1px solid rgba(234, 231, 220, 0.92);
+    border-radius: 12px;
+    padding: 6px;
+    background: rgba(253, 252, 240, 0.88);
+    box-shadow: 0 14px 34px rgba(43, 45, 66, 0.14);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .mobile-shell-nav button {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.48);
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 900;
+  }
+
+  .mobile-shell-nav button.is-active {
+    background: #2b2d42;
+    color: #fffdf4;
+    box-shadow: 0 10px 22px rgba(43, 45, 66, 0.18);
   }
 
   .journal-panel,
@@ -2735,6 +2783,15 @@ button:active {
   .analytics-grid {
     width: 100%;
     max-width: calc(100vw - 20px);
+  }
+
+  .journal-title {
+    align-items: flex-start;
+  }
+
+  .brand-mark {
+    width: 42px;
+    border-radius: 14px;
   }
 
   .planning-console {
@@ -2881,6 +2938,45 @@ button:active {
 
   .journal-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recent-stack {
+    gap: 8px;
+  }
+
+  .recent-stack:not(.is-open) .journal-filters,
+  .recent-stack:not(.is-open) .recent-list {
+    display: none;
+  }
+
+  .journal-filter-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-section-toggle {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    border: 1px solid rgba(43, 45, 66, 0.1);
+    border-radius: 8px;
+    padding: 0 10px;
+    background: rgba(255, 255, 255, 0.48);
+    color: var(--ink);
+    font-size: 0.66rem;
+    font-weight: 900;
+  }
+
+  .recent-stack.is-open .mobile-section-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  .journal-count {
+    display: none;
   }
 
   .journal-filters label:first-child {

@@ -256,7 +256,7 @@ async function navigateForDevice(cdp, device) {
 async function scanLayout(cdp, device) {
   const data = await evalInPage(cdp, `
     (() => {
-      const text = document.body.innerText;
+      const text = document.body.textContent;
       const selectors = [".journal-panel", ".dashboard-panel", ".entry-tabs", ".amount-field", ".note-field", ".category-grid", ".metric-grid", ".planning-console", ".analytics-grid", ".investment-summary", ".recent-list"];
       const rects = selectors.map((selector) => {
         const element = document.querySelector(selector);
@@ -267,6 +267,7 @@ async function scanLayout(cdp, device) {
       const horizontalOverflow = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth;
       const outOfBounds = rects.filter((rect) => !rect.missing && (rect.left < -2 || rect.right > window.innerWidth + 2));
       const recent = document.querySelector(".recent-list");
+      const recentCollapsed = recent ? getComputedStyle(recent).display === "none" : false;
       const accountsText = [...document.querySelectorAll(".account-token")].map((item) => item.innerText);
       const actionRects = [...document.querySelectorAll(".dashboard-actions > *")].map((element) => {
         const rect = element.getBoundingClientRect();
@@ -292,6 +293,7 @@ async function scanLayout(cdp, device) {
         recentRows: document.querySelectorAll(".recent-list .transaction-row").length,
         recentClientHeight: recent ? recent.clientHeight : 0,
         recentScrollHeight: recent ? recent.scrollHeight : 0,
+        recentCollapsed,
         accountChipHasBalance: accountsText.some((value) => value.includes("₹")),
         actionOverlap,
         panelKicker: document.querySelector(".panel-kicker span")?.innerText || "",
@@ -307,7 +309,7 @@ async function scanLayout(cdp, device) {
   record(`${device.name}: planning console tabs visible`, data.hasPlanner, "");
   record(`${device.name}: portfolio pulse present at BTF`, data.hasPortfolioPulse, "");
   record(`${device.name}: recent journal capped at 50`, data.recentRows === 50, String(data.recentRows));
-  record(`${device.name}: recent journal scroll container active`, data.recentScrollHeight > data.recentClientHeight, JSON.stringify({ client: data.recentClientHeight, scroll: data.recentScrollHeight }));
+  record(`${device.name}: recent journal scroll container active`, data.recentCollapsed || data.recentScrollHeight > data.recentClientHeight, JSON.stringify({ client: data.recentClientHeight, scroll: data.recentScrollHeight, collapsed: data.recentCollapsed }));
   record(`${device.name}: account chips hide balances`, !data.accountChipHasBalance, "");
   record(`${device.name}: header shows month only`, /^[A-Za-z]+ \d{4}$/.test(data.panelKicker), data.panelKicker);
 
@@ -832,6 +834,36 @@ async function runEdgeCaseTests(cdp) {
     })()
   `);
   record("zero budget and zero split targets do not break UI", zeroBudget.noNaN && zeroBudget.hasBudget && zeroBudget.overflow <= 3, JSON.stringify(zeroBudget));
+
+  await navigateForDevice(cdp, { ...devices[8], name: "edge-mobile-pages" });
+  await waitForPageReady(cdp);
+  const mobileInitial = await evalInPage(cdp, `
+    (() => ({
+      logVisible: getComputedStyle(document.querySelector(".journal-panel")).display !== "none",
+      dashboardHidden: getComputedStyle(document.querySelector(".dashboard-panel")).display === "none",
+      recentCollapsed: getComputedStyle(document.querySelector(".recent-list")).display === "none",
+      navVisible: getComputedStyle(document.querySelector(".mobile-shell-nav")).display !== "none",
+      overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth,
+    }))()
+  `);
+  record("mobile log page is primary and recent journal is collapsed", mobileInitial.logVisible && mobileInitial.dashboardHidden && mobileInitial.recentCollapsed && mobileInitial.navVisible && mobileInitial.overflow <= 3, JSON.stringify(mobileInitial));
+
+  await evalInPage(cdp, `[...document.querySelectorAll(".mobile-shell-nav button")].find((button) => button.innerText.includes("Dashboard")).click()`);
+  await wait(180);
+  const mobileDashboard = await evalInPage(cdp, `
+    (() => ({
+      logHidden: getComputedStyle(document.querySelector(".journal-panel")).display === "none",
+      dashboardVisible: getComputedStyle(document.querySelector(".dashboard-panel")).display !== "none",
+      periodsVisible: getComputedStyle(document.querySelector(".period-tabs")).display !== "none",
+      overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth,
+    }))()
+  `);
+  record("mobile dashboard page opens without overlap or overflow", mobileDashboard.logHidden && mobileDashboard.dashboardVisible && mobileDashboard.periodsVisible && mobileDashboard.overflow <= 3, JSON.stringify(mobileDashboard));
+
+  await evalInPage(cdp, `[...document.querySelectorAll(".mobile-shell-nav button")].find((button) => button.innerText.includes("Log")).click()`);
+  await wait(120);
+  const mobileBackToLog = await evalInPage(cdp, `getComputedStyle(document.querySelector(".journal-panel")).display !== "none" && getComputedStyle(document.querySelector(".dashboard-panel")).display === "none"`);
+  record("mobile bottom nav returns to log page", mobileBackToLog, "");
 
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 320,
