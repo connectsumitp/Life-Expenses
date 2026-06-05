@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 
 const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
+const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
+const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
 
 const DEFAULT_CATEGORIES = [
   "Daily Essentials",
@@ -81,6 +83,8 @@ const DEFAULT_ALLOCATION_TARGETS = {
   wants: 30,
   savings: 20,
 };
+
+const ALLOCATION_KEYS = ["needs", "wants", "savings"];
 
 const JOURNAL_SPEND_FILTERS = [
   { id: "all", label: "All spends" },
@@ -152,6 +156,7 @@ const STORAGE_KEYS = {
   budgets: "life-expenses.budgets",
   categoryBuckets: "life-expenses.categoryBuckets",
   expenseCategories: "life-expenses.expenseCategories",
+  ownerProfile: "life-expenses.ownerProfile",
   recurringRules: "life-expenses.recurringRules",
   userProfile: "life-expenses.userProfile",
 };
@@ -177,6 +182,19 @@ function normalizeUserProfile(profile) {
     label: profile.label || email.split("@")[0] || "Personal workspace",
     userId: profile.userId || makeUserId(identity),
   };
+}
+
+function getConfiguredWorkspaceProfile() {
+  if (!CONFIGURED_WORKSPACE_EMAIL || !CONFIGURED_WORKSPACE_KEY) return null;
+  return normalizeUserProfile({
+    email: CONFIGURED_WORKSPACE_EMAIL,
+    privateKey: CONFIGURED_WORKSPACE_KEY,
+    label: CONFIGURED_WORKSPACE_EMAIL.split("@")[0] || "Workspace",
+  });
+}
+
+function profilesMatch(profile, ownerProfile) {
+  return Boolean(profile?.identity && ownerProfile?.identity && profile.identity === ownerProfile.identity);
 }
 
 function getScopedStorageKey(key, userId) {
@@ -303,6 +321,30 @@ function writeStoredValue(key, value) {
   }
 }
 
+function getInitialUserProfile() {
+  const storedProfile = normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null));
+  if (!storedProfile) return null;
+  const configuredProfile = getConfiguredWorkspaceProfile();
+  if (configuredProfile) return profilesMatch(storedProfile, configuredProfile) ? storedProfile : null;
+  return storedProfile;
+}
+
+function getLocalOwnerProfile() {
+  return normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null)) || normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null));
+}
+
+function numericInputValue(value) {
+  return Number(value || 0) === 0 ? "" : String(value);
+}
+
+function numericFieldFocus(event) {
+  if (Number(event.currentTarget.value || 0) === 0) {
+    event.currentTarget.value = "";
+    return;
+  }
+  event.currentTarget.select();
+}
+
 function makeSlug(name, existingIds = []) {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "item";
   let id = base;
@@ -354,10 +396,35 @@ function normalizeBudgets(categories, storedBudgets = DEFAULT_BUDGETS) {
 }
 
 function normalizeAllocationTargets(storedTargets = DEFAULT_ALLOCATION_TARGETS) {
-  return {
+  const rawTargets = {
     needs: Math.max(0, Math.min(100, Number(storedTargets?.needs ?? DEFAULT_ALLOCATION_TARGETS.needs))),
     wants: Math.max(0, Math.min(100, Number(storedTargets?.wants ?? DEFAULT_ALLOCATION_TARGETS.wants))),
     savings: Math.max(0, Math.min(100, Number(storedTargets?.savings ?? DEFAULT_ALLOCATION_TARGETS.savings))),
+  };
+  const total = ALLOCATION_KEYS.reduce((sum, key) => sum + rawTargets[key], 0);
+  if (total === 100) return rawTargets;
+  if (total <= 0) return DEFAULT_ALLOCATION_TARGETS;
+  const needs = Math.round((rawTargets.needs / total) * 100);
+  const wants = Math.round((rawTargets.wants / total) * 100);
+  return {
+    needs,
+    wants,
+    savings: Math.max(0, 100 - needs - wants),
+  };
+}
+
+function rebalanceAllocationTarget(targets, bucketName, nextValue) {
+  const selectedValue = Math.max(0, Math.min(100, Number(nextValue || 0)));
+  const otherKeys = ALLOCATION_KEYS.filter((key) => key !== bucketName);
+  const remaining = 100 - selectedValue;
+  const otherTotal = otherKeys.reduce((sum, key) => sum + Number(targets[key] || 0), 0);
+  let firstOther = otherTotal > 0 ? Math.round((Number(targets[otherKeys[0]] || 0) / otherTotal) * remaining) : Math.round(remaining / 2);
+  firstOther = Math.max(0, Math.min(remaining, firstOther));
+  return {
+    ...targets,
+    [bucketName]: selectedValue,
+    [otherKeys[0]]: firstOther,
+    [otherKeys[1]]: remaining - firstOther,
   };
 }
 
@@ -414,7 +481,7 @@ function evaluateAmountExpression(expression) {
 }
 
 function App() {
-  const [userProfile, setUserProfile] = useState(() => normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null)));
+  const [userProfile, setUserProfile] = useState(() => getInitialUserProfile());
   const [userEmailDraft, setUserEmailDraft] = useState(() => userProfile?.email || "");
   const [userKeyDraft, setUserKeyDraft] = useState(() => userProfile?.privateKey || "");
   const activeUserId = userProfile?.userId || "";
@@ -515,6 +582,9 @@ function App() {
     if (!userProfile) return;
     const nextCategories = readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, userProfile.userId), DEFAULT_CATEGORIES);
     writeStoredValue(STORAGE_KEYS.userProfile, userProfile);
+    if (!getConfiguredWorkspaceProfile() && !normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null))) {
+      writeStoredValue(STORAGE_KEYS.ownerProfile, userProfile);
+    }
     setTransactions([]);
     setExpenseCategories(nextCategories);
     setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
@@ -713,22 +783,21 @@ function App() {
   }
 
   function updateCategoryBudget(categoryName, nextValue) {
+    const nextCategories = {
+      ...budgets.categories,
+      [categoryName]: Math.max(0, Number(nextValue || 0)),
+    };
     const nextBudgets = {
       ...budgets,
-      categories: {
-        ...budgets.categories,
-        [categoryName]: Math.max(0, Number(nextValue || 0)),
-      },
+      monthlyTotal: Object.values(nextCategories).reduce((sum, value) => sum + Number(value || 0), 0),
+      categories: nextCategories,
     };
     setBudgets(nextBudgets);
     saveBudgetsToBridge(nextBudgets);
   }
 
   function updateAllocationTarget(bucketName, nextValue) {
-    setAllocationTargets((current) => ({
-      ...current,
-      [bucketName]: Math.max(0, Math.min(100, Number(nextValue || 0))),
-    }));
+    setAllocationTargets((current) => rebalanceAllocationTarget(current, bucketName, nextValue));
   }
 
   function completeBudgetSetup() {
@@ -793,9 +862,19 @@ function App() {
       setStatus("Enter email and private key");
       return;
     }
-    setUserProfile(profile);
-    setUserEmailDraft(profile.email);
-    setUserKeyDraft(profile.privateKey);
+    const configuredProfile = getConfiguredWorkspaceProfile();
+    const localOwnerProfile = configuredProfile || getLocalOwnerProfile();
+    if (localOwnerProfile && !profilesMatch(profile, localOwnerProfile)) {
+      setStatus("Email or private key does not match");
+      return;
+    }
+    if (!configuredProfile && !localOwnerProfile) {
+      writeStoredValue(STORAGE_KEYS.ownerProfile, profile);
+    }
+    const activeProfile = localOwnerProfile ? { ...localOwnerProfile, label: profile.label } : profile;
+    setUserProfile(activeProfile);
+    setUserEmailDraft(activeProfile.email);
+    setUserKeyDraft(activeProfile.privateKey);
     setStatus("Workspace loaded");
   }
 
@@ -1154,10 +1233,13 @@ function App() {
       {!userProfile && (
         <div className="modal-layer user-gate-layer" role="presentation">
           <form className="user-gate glass" onSubmit={saveUserWorkspace}>
-            <div>
-              <span className="section-label">Private workspace</span>
-              <h2>Open your finance command center</h2>
-              <p>Use the same email and private key together every time. Entries in the shared Google Sheet stay separated by this combined workspace ID.</p>
+            <div className="user-gate-brand">
+              <img alt="LogXpens logo" className="user-gate-logo" src="/logxpens-logo.png" />
+              <div>
+                <span className="section-label">Private workspace</span>
+                <h2>Open your finance command center</h2>
+                <p>Use the same email and private key together every time. Entries in the shared Google Sheet stay separated by this combined workspace ID.</p>
+              </div>
             </div>
             <label className="asset-input">
               <span>Email</span>
@@ -1195,6 +1277,7 @@ function App() {
         </div>
 
         <div className="journal-title">
+          <img alt="LogXpens logo" className="brand-mark" src="/logxpens-logo.png" />
           <h1>Finance Command Center</h1>
         </div>
 
@@ -1635,7 +1718,9 @@ function App() {
                     aria-label="Monthly total budget"
                     inputMode="decimal"
                     type="number"
-                    value={budgets.monthlyTotal}
+                    placeholder="0"
+                    value={numericInputValue(budgets.monthlyTotal)}
+                    onFocus={numericFieldFocus}
                     onChange={(event) => updateMonthlyBudget(event.target.value)}
                   />
                 </label>
@@ -1648,7 +1733,9 @@ function App() {
                         aria-label={`${item.name} budget limit`}
                         inputMode="decimal"
                         type="number"
-                        value={budgets.categories[item.name] || 0}
+                        placeholder="0"
+                        value={numericInputValue(budgets.categories[item.name])}
+                        onFocus={numericFieldFocus}
                         onChange={(event) => updateCategoryBudget(item.name, event.target.value)}
                       />
                       <i aria-hidden="true">
@@ -1706,7 +1793,9 @@ function App() {
                         aria-label={`${rule.name} amount`}
                         inputMode="decimal"
                         type="number"
-                        value={rule.amount}
+                        placeholder="0"
+                        value={numericInputValue(rule.amount)}
+                        onFocus={numericFieldFocus}
                         onChange={(event) => updateRecurringRule(rule.id, { amount: event.target.value })}
                       />
                       <select
@@ -1723,7 +1812,9 @@ function App() {
                         max={rule.frequency === "weekly" ? "6" : "31"}
                         min="1"
                         type="number"
-                        value={rule.dueDay}
+                        placeholder="1"
+                        value={numericInputValue(rule.dueDay)}
+                        onFocus={numericFieldFocus}
                         onChange={(event) => updateRecurringRule(rule.id, { dueDay: event.target.value })}
                       />
                       <span>
@@ -1759,7 +1850,9 @@ function App() {
                     max="100"
                     min="0"
                     type="number"
-                    value={allocationTargets[key]}
+                    placeholder="0"
+                    value={numericInputValue(allocationTargets[key])}
+                    onFocus={numericFieldFocus}
                     onChange={(event) => updateAllocationTarget(key, event.target.value)}
                   />
                   <small>Actual {analytics.allocations[key]}%</small>
@@ -1867,7 +1960,9 @@ function App() {
                     aria-label="Monthly total budget"
                     inputMode="decimal"
                     type="number"
-                    value={budgets.monthlyTotal}
+                    placeholder="0"
+                    value={numericInputValue(budgets.monthlyTotal)}
+                    onFocus={numericFieldFocus}
                     onChange={(event) => updateMonthlyBudget(event.target.value)}
                   />
                 </label>
@@ -1886,7 +1981,9 @@ function App() {
                       aria-label={`${item.name} budget limit`}
                       inputMode="decimal"
                       type="number"
-                      value={budgets.categories[item.name] || 0}
+                      placeholder="0"
+                      value={numericInputValue(budgets.categories[item.name])}
+                      onFocus={numericFieldFocus}
                       onChange={(event) => updateCategoryBudget(item.name, event.target.value)}
                     />
                     <i aria-hidden="true">
@@ -1936,7 +2033,9 @@ function App() {
                         aria-label={`${rule.name} amount`}
                         inputMode="decimal"
                         type="number"
-                        value={rule.amount}
+                        placeholder="0"
+                        value={numericInputValue(rule.amount)}
+                        onFocus={numericFieldFocus}
                         onChange={(event) => updateRecurringRule(rule.id, { amount: event.target.value })}
                       />
                       <select
@@ -1953,7 +2052,9 @@ function App() {
                         max={rule.frequency === "weekly" ? "6" : "31"}
                         min="1"
                         type="number"
-                        value={rule.dueDay}
+                        placeholder="1"
+                        value={numericInputValue(rule.dueDay)}
+                        onFocus={numericFieldFocus}
                         onChange={(event) => updateRecurringRule(rule.id, { dueDay: event.target.value })}
                       />
                       <span>
@@ -2187,6 +2288,48 @@ function App() {
                       />
                     </div>
                   ))}
+                  <div className="account-line account-add-line">
+                    {addingAccount ? (
+                      <>
+                        <input
+                          autoFocus
+                          aria-label="New account"
+                          placeholder="New account"
+                          value={newAccountDraft}
+                          onChange={(event) => setNewAccountDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addAccount();
+                            }
+                            if (event.key === "Escape") {
+                              setAddingAccount(false);
+                              setNewAccountDraft("");
+                            }
+                          }}
+                        />
+                        <button aria-label="Save account" className="token-action-button" onClick={addAccount} type="button">
+                          <Check size={14} />
+                        </button>
+                        <button
+                          aria-label="Cancel account"
+                          className="token-action-button"
+                          onClick={() => {
+                            setAddingAccount(false);
+                            setNewAccountDraft("");
+                          }}
+                          type="button"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button className="account-section-add" onClick={() => setAddingAccount(true)} type="button">
+                        <Plus size={14} />
+                        <span>Add account</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -3024,10 +3167,10 @@ function EditableText({ value, onCommit, ...props }) {
 }
 
 function EditableNumber({ value, onCommit, ...props }) {
-  const [draft, setDraft] = useState(String(value ?? 0));
+  const [draft, setDraft] = useState(numericInputValue(value));
 
   useEffect(() => {
-    setDraft(String(value ?? 0));
+    setDraft(numericInputValue(value));
   }, [value]);
 
   function commit() {
@@ -3044,10 +3187,18 @@ function EditableNumber({ value, onCommit, ...props }) {
       type="number"
       onBlur={commit}
       onChange={(event) => setDraft(event.target.value)}
+      onFocus={(event) => {
+        if (Number(draft || 0) === 0) {
+          setDraft("");
+          return;
+        }
+        event.currentTarget.select();
+      }}
+      placeholder="0"
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") {
-          setDraft(String(value ?? 0));
+          setDraft(numericInputValue(value));
           event.currentTarget.blur();
         }
       }}

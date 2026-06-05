@@ -175,6 +175,7 @@ function stubScript() {
         localStorage.removeItem("life-expenses.categoryBuckets");
         localStorage.removeItem("life-expenses.expenseCategories");
         localStorage.setItem("life-expenses.userProfile", JSON.stringify({ email: "uat@example.com", privateKey: "uat-key", identity: "uat@example.com::uat-key", label: "uat", userId: "user-uat" }));
+        localStorage.setItem("life-expenses.ownerProfile", JSON.stringify({ email: "uat@example.com", privateKey: "uat-key", identity: "uat@example.com::uat-key", label: "uat", userId: "user-uat" }));
       } catch {}
       const nativeFetch = window.fetch.bind(window);
       window.fetch = async (input, init = {}) => {
@@ -267,6 +268,15 @@ async function scanLayout(cdp, device) {
       const outOfBounds = rects.filter((rect) => !rect.missing && (rect.left < -2 || rect.right > window.innerWidth + 2));
       const recent = document.querySelector(".recent-list");
       const accountsText = [...document.querySelectorAll(".account-token")].map((item) => item.innerText);
+      const actionRects = [...document.querySelectorAll(".dashboard-actions > *")].map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      });
+      const actionOverlap = actionRects.some((rect, index) =>
+        actionRects.slice(index + 1).some((other) =>
+          rect.left < other.right - 2 && rect.right > other.left + 2 && rect.top < other.bottom - 2 && rect.bottom > other.top + 2
+        )
+      );
       return {
         width: window.innerWidth,
         height: window.innerHeight,
@@ -283,6 +293,7 @@ async function scanLayout(cdp, device) {
         recentClientHeight: recent ? recent.clientHeight : 0,
         recentScrollHeight: recent ? recent.scrollHeight : 0,
         accountChipHasBalance: accountsText.some((value) => value.includes("₹")),
+        actionOverlap,
         panelKicker: document.querySelector(".panel-kicker span")?.innerText || "",
         visibleButtons: document.querySelectorAll("button").length,
       };
@@ -292,6 +303,7 @@ async function scanLayout(cdp, device) {
   record(`${device.name}: no horizontal overflow`, data.horizontalOverflow <= 3 && data.outOfBounds.length === 0, JSON.stringify({ overflow: data.horizontalOverflow, outOfBounds: data.outOfBounds }));
   record(`${device.name}: Step/Flow removed`, !data.hasStep1 && !data.hasFlow, JSON.stringify({ hasStep1: data.hasStep1, hasFlow: data.hasFlow }));
   record(`${device.name}: tabs and period controls visible`, data.hasTabs && data.hasPeriods, "");
+  record(`${device.name}: dashboard actions do not overlap`, !data.actionOverlap, "");
   record(`${device.name}: planning console tabs visible`, data.hasPlanner, "");
   record(`${device.name}: portfolio pulse present at BTF`, data.hasPortfolioPulse, "");
   record(`${device.name}: recent journal capped at 50`, data.recentRows === 50, String(data.recentRows));
@@ -306,6 +318,20 @@ async function scanLayout(cdp, device) {
 async function runInteractionTests(cdp) {
   await navigateForDevice(cdp, devices[0]);
   await waitForPageReady(cdp);
+  await evalInPage(cdp, `document.querySelector(".user-chip").click()`);
+  await wait(150);
+  await setNativeValue(cdp, ".user-gate input[type='email']", "uat@example.com");
+  await setNativeValue(cdp, ".user-gate input[type='password']", "wrong-key");
+  await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
+  await wait(150);
+  const wrongWorkspaceBlocked = await evalInPage(cdp, `Boolean(document.querySelector(".user-gate"))`);
+  record("workspace gate blocks wrong private key", wrongWorkspaceBlocked, "");
+  await setNativeValue(cdp, ".user-gate input[type='password']", "uat-key");
+  await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
+  await wait(250);
+  const correctWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
+  record("workspace gate accepts matching email and key", correctWorkspaceOpens, "");
+
   await evalInPage(cdp, `
     (() => {
       const tab = [...document.querySelectorAll(".entry-tab")].find((button) => button.innerText === "Expenses");
@@ -419,6 +445,37 @@ async function runInteractionTests(cdp) {
   `);
   record("monthly budget limit editable and synced", budgetUpdated.value && budgetUpdated.posted, JSON.stringify(budgetUpdated));
 
+  await setNativeValue(cdp, ".budget-limit-line input", "0800");
+  await wait(250);
+  const categoryBudgetRollup = await evalInPage(cdp, `
+    (() => {
+      const categoryInputs = [...document.querySelectorAll(".budget-limit-line input")];
+      const categoryTotal = categoryInputs.reduce((sum, input) => sum + Number(input.value || 0), 0);
+      const monthlyValue = Number(document.querySelector("input[aria-label='Monthly total budget']").value || 0);
+      return {
+        firstValue: categoryInputs[0]?.value || "",
+        categoryTotal,
+        monthlyValue,
+        posted: window.__uatPosts.some((post) => post.action === "saveBudgets" && post.budgets?.monthlyTotal === categoryTotal),
+      };
+    })()
+  `);
+  record("category budgets roll up to monthly total without leading zero", categoryBudgetRollup.firstValue === "800" && categoryBudgetRollup.categoryTotal === categoryBudgetRollup.monthlyValue && categoryBudgetRollup.posted, JSON.stringify(categoryBudgetRollup));
+
+  await setNativeValue(cdp, "input[aria-label='Needs allocation target']", "080");
+  await wait(150);
+  const splitBalanced = await evalInPage(cdp, `
+    (() => {
+      const values = ["Needs", "Wants", "Savings"].map((label) => Number(document.querySelector(\`input[aria-label='\${label} allocation target']\`)?.value || 0));
+      return {
+        values,
+        sum: values.reduce((total, value) => total + value, 0),
+        needsValue: document.querySelector("input[aria-label='Needs allocation target']")?.value || "",
+      };
+    })()
+  `);
+  record("allocation targets always rebalance to 100", splitBalanced.sum === 100 && splitBalanced.needsValue === "80", JSON.stringify(splitBalanced));
+
   await evalInPage(cdp, `
     (() => {
       const button = [...document.querySelectorAll(".recurring-command-card button")].find((item) => item.innerText.includes("Manage"));
@@ -508,6 +565,38 @@ async function runInteractionTests(cdp) {
     }))()
   `);
   record("account add persists via saveAccounts", addedAccount.exists && addedAccount.posted, JSON.stringify(addedAccount));
+
+  await evalInPage(cdp, `[...document.querySelectorAll(".detail-tab")].find((button) => button.innerText.includes("Accounts")).click()`);
+  await wait(150);
+  await evalInPage(cdp, `document.querySelector(".account-section-add").click()`);
+  await setNativeValue(cdp, ".account-add-line input[aria-label='New account']", "Section Account");
+  await evalInPage(cdp, `document.querySelector(".account-add-line button[aria-label='Save account']").click()`);
+  await wait(250);
+  const sectionAccountAdded = await evalInPage(cdp, `
+    (() => ({
+      exists: [...document.querySelectorAll(".account-line input")].some((item) => item.value.includes("Section Account")),
+      posted: window.__uatPosts.some((post) => post.action === "saveAccounts" && JSON.stringify(post).includes("Section Account")),
+    }))()
+  `);
+  record("account section add persists via saveAccounts", sectionAccountAdded.exists && sectionAccountAdded.posted, JSON.stringify(sectionAccountAdded));
+
+  await evalInPage(cdp, `document.querySelector("input[aria-label='SBI Account balance']").focus()`);
+  await setNativeValue(cdp, "input[aria-label='SBI Account balance']", "123456");
+  await evalInPage(cdp, `document.querySelector("input[aria-label='SBI Account balance']").blur()`);
+  await wait(250);
+  const portfolioRollup = await evalInPage(cdp, `
+    (() => {
+      const accountInputs = [...document.querySelectorAll(".editable-account-line input[type='number']")];
+      const accountTotal = accountInputs.reduce((sum, input) => sum + Number(input.value || 0), 0);
+      const portfolioTotal = Number((document.querySelector(".investment-copy strong")?.innerText || "").replace(/[^0-9]/g, ""));
+      return {
+        accountTotal,
+        portfolioTotal,
+        sbiValue: document.querySelector("input[aria-label='SBI Account balance']")?.value || "",
+      };
+    })()
+  `);
+  record("portfolio total equals account balances", portfolioRollup.accountTotal === portfolioRollup.portfolioTotal && portfolioRollup.sbiValue === "123456", JSON.stringify(portfolioRollup));
 
   await setNativeValue(cdp, ".amount-field input", "321");
   await setNativeValue(cdp, "input[aria-label='Entry date']", "2026-07-20");
@@ -726,8 +815,8 @@ async function runEdgeCaseTests(cdp) {
 
   await evalInPage(cdp, `
     (() => {
-      localStorage.setItem("life-expenses.budgets", JSON.stringify({ monthlyTotal: 0, categories: {} }));
-      localStorage.setItem("life-expenses.allocationTargets", JSON.stringify({ needs: 0, wants: 0, savings: 0 }));
+      localStorage.setItem("life-expenses.budgets.user-uat", JSON.stringify({ monthlyTotal: 0, categories: {} }));
+      localStorage.setItem("life-expenses.allocationTargets.user-uat", JSON.stringify({ needs: 0, wants: 0, savings: 0 }));
     })()
   `);
   await navigateForDevice(cdp, { ...devices[0], name: "edge-zero-budget" });
