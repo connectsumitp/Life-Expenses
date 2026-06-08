@@ -158,6 +158,7 @@ const STORAGE_KEYS = {
   expenseCategories: "life-expenses.expenseCategories",
   ownerProfile: "life-expenses.ownerProfile",
   recurringRules: "life-expenses.recurringRules",
+  transactions: "life-expenses.transactions",
   userProfile: "life-expenses.userProfile",
 };
 
@@ -361,6 +362,15 @@ function mergeAccounts(primaryAccounts, fallbackAccounts) {
   return [...primaryAccounts, ...fallbackAccounts.filter((account) => !ids.has(account.id))];
 }
 
+function mergeTransactions(primaryTransactions = [], fallbackTransactions = []) {
+  const ids = new Set(primaryTransactions.map((transaction) => transaction.id));
+  return [...primaryTransactions, ...fallbackTransactions.filter((transaction) => transaction?.id && !ids.has(transaction.id))].sort((a, b) => {
+    const aTime = new Date(a.timestamp || a.date || 0).getTime();
+    const bTime = new Date(b.timestamp || b.date || 0).getTime();
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
+}
+
 function normalizeCategories(categories) {
   if (!Array.isArray(categories)) return [];
   return categories
@@ -440,6 +450,14 @@ function normalizeRecurringRules(rules, categories) {
   }));
 }
 
+function normalizeDashboardTransactions(transactions) {
+  return (Array.isArray(transactions) ? transactions : []).map((transaction) => ({
+    ...transaction,
+    category: normalizeCategoryName(transaction.category),
+    bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
+  }));
+}
+
 function getNextDueDate(rule, anchorDate = new Date()) {
   const today = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
   if (rule.frequency === "weekly") {
@@ -512,7 +530,11 @@ function App() {
   const [journalSpend, setJournalSpend] = useState("all");
   const [journalDirection, setJournalDirection] = useState("all");
   const [journalNoteMode, setJournalNoteMode] = useState("all");
-  const [transactions, setTransactions] = useState(DEMO_TRANSACTIONS);
+  const [transactions, setTransactions] = useState(() => {
+    if (!activeUserId) return DEMO_TRANSACTIONS;
+    const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), []);
+    return Array.isArray(localTransactions) ? localTransactions : [];
+  });
   const [assets, setAssets] = useState({ mutualFunds: 126000, stocks: 72500 });
   const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), DEFAULT_ALLOCATION_TARGETS)));
   const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), DEFAULT_BUDGETS)));
@@ -542,11 +564,9 @@ function App() {
         const data = await apiGetDashboard(activeUserId);
         if (!alive || !data) return;
         if (Array.isArray(data.transactions)) {
-          setTransactions(data.transactions.map((transaction) => ({
-            ...transaction,
-            category: normalizeCategoryName(transaction.category),
-            bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
-          })));
+          const remoteTransactions = normalizeDashboardTransactions(data.transactions);
+          const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), []);
+          setTransactions(mergeTransactions(remoteTransactions, Array.isArray(localTransactions) ? localTransactions : []));
         }
         if (Array.isArray(data.categories) && data.categories.length) {
           const nextCategories = normalizeCategories(data.categories);
@@ -587,7 +607,8 @@ function App() {
     if (!getConfiguredWorkspaceProfile() && !normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null))) {
       writeStoredValue(STORAGE_KEYS.ownerProfile, userProfile);
     }
-    setTransactions([]);
+    const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, userProfile.userId), []);
+    setTransactions(Array.isArray(localTransactions) ? localTransactions : []);
     setExpenseCategories(nextCategories);
     setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
     setAccounts(normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, userProfile.userId), DEFAULT_ACCOUNTS)));
@@ -644,6 +665,11 @@ function App() {
     writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), accounts);
   }, [accounts, activeUserId]);
 
+  useEffect(() => {
+    if (!activeUserId) return;
+    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), transactions.slice(0, 250));
+  }, [transactions, activeUserId]);
+
   const analytics = useMemo(
     () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets),
     [transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets],
@@ -684,11 +710,8 @@ function App() {
   function applyDashboardData(data) {
     if (!data) return;
     if (Array.isArray(data.transactions)) {
-      setTransactions(data.transactions.map((transaction) => ({
-        ...transaction,
-        category: normalizeCategoryName(transaction.category),
-        bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
-      })));
+      const remoteTransactions = normalizeDashboardTransactions(data.transactions);
+      setTransactions((current) => mergeTransactions(remoteTransactions, current));
     }
     if (Array.isArray(data.categories) && data.categories.length) {
       const nextCategories = normalizeCategories(data.categories);
@@ -1153,7 +1176,11 @@ function App() {
     const direction = entryMode;
     const entry = makeEntry(numericAmount, activeCategory, direction, selectedAccount, dateFromInputValue(entryDate), note.trim());
     if (direction === "expense") entry.bucket = activeBucket;
-    setTransactions((current) => [entry, ...current]);
+    setTransactions((current) => {
+      const nextTransactions = [entry, ...current];
+      if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), nextTransactions.slice(0, 250));
+      return nextTransactions;
+    });
     const nextAccounts = adjustAccount(selectedAccount, direction === "expense" ? -numericAmount : numericAmount);
     setAmount("");
     setNote("");

@@ -633,6 +633,23 @@ async function runInteractionTests(cdp) {
   `);
   record("expense log posts selected date user and clears fields", expenseLogged.posted && expenseLogged.postedUser === "user-uat" && expenseLogged.postedDate === "2026-07-20" && expenseLogged.postedMonth === "Jul 2026" && expenseLogged.amountCleared && expenseLogged.dateReset && expenseLogged.noteCleared, JSON.stringify(expenseLogged));
 
+  await navigateForDevice(cdp, { ...devices[0], name: "desktop-refresh-after-expense" });
+  await waitForPageReady(cdp);
+  const refreshState = await evalInPage(cdp, `
+    (() => {
+      const body = document.body.innerText;
+      const stored = JSON.parse(localStorage.getItem("life-expenses.transactions.user-uat") || "[]");
+      return {
+        bodyHasNote: body.includes("UAT expense note"),
+        bodyHasAmount: body.includes("-₹321"),
+        storedHasNote: stored.some((transaction) => transaction.note === "UAT expense note"),
+        storedCount: stored.length,
+        recentTop: document.querySelector(".recent-list .transaction-row")?.innerText || "",
+      };
+    })()
+  `);
+  record("expense log survives refresh via scoped local cache", refreshState.bodyHasNote && refreshState.bodyHasAmount && refreshState.storedHasNote, JSON.stringify(refreshState));
+
   await evalInPage(cdp, `document.querySelector(".entry-tab[aria-selected='false']").click()`);
   await wait(250);
   const incomeTab = await evalInPage(cdp, `
