@@ -1138,19 +1138,49 @@ function App() {
 
   function deleteTransaction(transactionId) {
     const deletedTransaction = transactions.find((transaction) => transaction.id === transactionId);
+    if (!deletedTransaction) return;
+    const confirmed = window.confirm("Delete this journal entry?");
+    if (!confirmed) return;
+
     const previousTransactions = transactions;
     const previousAccounts = accounts;
+    const nextTransactions = transactions.filter((transaction) => transaction.id !== transactionId);
+    const balanceDelta = deletedTransaction.direction === "income" ? -deletedTransaction.amount : deletedTransaction.amount;
+    const nextAccounts = deletedTransaction.accountId
+      ? accounts.map((account) =>
+          account.id === deletedTransaction.accountId
+            ? { ...account, balance: Math.max(0, Number(account.balance || 0) + balanceDelta), updatedAt: new Date().toISOString() }
+            : account,
+        )
+      : accounts;
+
     pushUndo("deleted entry", () => {
       setTransactions(previousTransactions);
       setAccounts(previousAccounts);
+      writeStoredTransactions(activeUserId, previousTransactions);
+      if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), previousAccounts);
+      apiPost(deletedTransaction.direction === "income" ? "addIncome" : "addExpense", {
+        ...deletedTransaction,
+        accounts: previousAccounts,
+      }, activeUserId).catch(() => {
+        setStatus("Entry restored locally, bridge failed");
+      });
     });
-    setTransactions((current) => current.filter((transaction) => transaction.id !== transactionId));
-    if (deletedTransaction?.accountId) {
-      adjustAccount(
-        deletedTransaction.accountId,
-        deletedTransaction.direction === "income" ? -deletedTransaction.amount : deletedTransaction.amount,
-      );
-    }
+
+    setTransactions(nextTransactions);
+    writeStoredTransactions(activeUserId, nextTransactions);
+    setAccounts(nextAccounts);
+    if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), nextAccounts);
+    setStatus("Entry deleted");
+    apiPost("deleteTransaction", {
+      id: transactionId,
+      transactionId,
+      accounts: nextAccounts,
+    }, activeUserId).then(() => {
+      setStatus("Entry deleted from sheet");
+    }).catch(() => {
+      setStatus("Entry deleted locally, bridge failed");
+    });
   }
 
   function addOrUpdateAsset(name, type, balance) {
@@ -1709,6 +1739,15 @@ function App() {
               <b className={transaction.direction === "income" ? "is-income" : "is-expense"}>
                 {transaction.direction === "income" ? "+" : "-"}₹{formatMoney(transaction.amount)}
               </b>
+              <button
+                aria-label={`Delete ${transaction.category} entry`}
+                className="transaction-delete journal-delete-button"
+                onClick={() => deleteTransaction(transaction.id)}
+                title="Delete entry"
+                type="button"
+              >
+                <Trash2 size={13} />
+              </button>
             </article>
             ))}
             {!filteredJournalEntries.length && <div className="empty-journal">No journal entries match these filters</div>}

@@ -170,6 +170,7 @@ function stubScript() {
         unplanned: 420
       };
       window.__uatPosts = [];
+      window.confirm = () => true;
       try {
         localStorage.removeItem("life-expenses.accounts");
         localStorage.removeItem("life-expenses.categoryBuckets");
@@ -786,9 +787,24 @@ async function runInteractionTests(cdp) {
     })()
   `);
   record(
-    "journal rows only show category spend and description",
-    simplifiedJournalRows.rows === 50 && simplifiedJournalRows.deleteButtons === 0 && simplifiedJournalRows.hasOnlyCompactFields,
+    "journal rows show compact fields with delete action",
+    simplifiedJournalRows.rows === 50 && simplifiedJournalRows.deleteButtons === 50 && simplifiedJournalRows.hasOnlyCompactFields,
     JSON.stringify(simplifiedJournalRows),
+  );
+
+  await evalInPage(cdp, `document.querySelector(".recent-list .transaction-delete").click()`);
+  await wait(250);
+  const deletedJournalEntry = await evalInPage(cdp, `
+    (() => ({
+      topRow: document.querySelector(".recent-list .transaction-row")?.innerText || "",
+      posted: window.__uatPosts.some((post) => post.action === "deleteTransaction" && post.transactionId),
+      remainingRows: document.querySelectorAll(".recent-list .transaction-row").length,
+    }))()
+  `);
+  record(
+    "journal entry delete removes row and syncs",
+    !deletedJournalEntry.topRow.includes("UAT expense note") && deletedJournalEntry.posted && deletedJournalEntry.remainingRows === 50,
+    JSON.stringify(deletedJournalEntry),
   );
 }
 

@@ -960,7 +960,7 @@ button:active {
 
 .transaction-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   min-height: 50px;
   overflow: hidden;
@@ -1024,6 +1024,17 @@ button:active {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.42);
   color: var(--muted);
+}
+
+.journal-delete-button {
+  opacity: 0.62;
+}
+
+.journal-delete-button:hover,
+.journal-delete-button:focus-visible {
+  border-color: rgba(157, 98, 66, 0.28);
+  color: #9d6242;
+  opacity: 1;
 }
 
 .dashboard-panel {

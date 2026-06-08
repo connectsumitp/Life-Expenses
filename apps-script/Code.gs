@@ -136,6 +136,16 @@ function handlePost_(e) {
     return json_({ ok: true, action: action, transaction: row });
   }
 
+  if (action === "deleteTransaction") {
+    var deletedId = String(payload.transactionId || payload.id || "").trim();
+    var deleted = deleteUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), deletedId, userId);
+    if (Array.isArray(payload.accounts)) {
+      var replacementAccounts = normalizeAccounts_(payload.accounts);
+      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, replacementAccounts, userId);
+    }
+    return json_({ ok: true, action: action, deleted: deleted, transactionId: deletedId });
+  }
+
   if (action === "updateGroww") {
     var cells = payload.cells || {};
     var mf = Number(payload.mf || payload.mutualFunds || cells.C16 || 0);
@@ -305,6 +315,26 @@ function writeUserObjects_(sheet, headers, rows, userId) {
     if (normalizeUserId_(existing[i].userId) !== target) retained.push(existing[i]);
   }
   writeObjects_(sheet, headers, retained.concat(withUserId_(rows || [], target)));
+}
+
+function deleteUserTransaction_(sheet, transactionId, userId) {
+  if (!transactionId) return false;
+  var target = normalizeUserId_(userId);
+  var rows = readObjects_(sheet);
+  var kept = [];
+  var deleted = false;
+
+  for (var i = 0; i < rows.length; i += 1) {
+    var row = rows[i] || {};
+    if (!deleted && String(row.id || "") === transactionId && normalizeUserId_(row.userId) === target) {
+      deleted = true;
+      continue;
+    }
+    kept.push(row);
+  }
+
+  if (deleted) writeObjects_(sheet, HEADERS.transactions, kept);
+  return deleted;
 }
 
 function appendObject_(sheet, headers, row) {
