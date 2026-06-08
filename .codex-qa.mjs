@@ -464,6 +464,19 @@ async function runInteractionTests(cdp) {
   `);
   record("category budgets roll up to monthly total without leading zero", categoryBudgetRollup.firstValue === "800" && categoryBudgetRollup.categoryTotal === categoryBudgetRollup.monthlyValue && categoryBudgetRollup.posted, JSON.stringify(categoryBudgetRollup));
 
+  await typeIntoFocusedInput(cdp, "input[aria-label='Savings allocation target']", "20");
+  await wait(150);
+  const savingsSplitStable = await evalInPage(cdp, `
+    (() => {
+      const values = ["Needs", "Wants", "Savings"].map((label) => Number(document.querySelector(\`input[aria-label='\${label} allocation target']\`)?.value || 0));
+      return {
+        values,
+        sum: values.reduce((total, value) => total + value, 0),
+      };
+    })()
+  `);
+  record("allocation typing uses final value without split drift", savingsSplitStable.values[0] === 50 && savingsSplitStable.values[1] === 30 && savingsSplitStable.values[2] === 20 && savingsSplitStable.sum === 100, JSON.stringify(savingsSplitStable));
+
   await setNativeValue(cdp, "input[aria-label='Needs allocation target']", "080");
   await wait(150);
   const splitBalanced = await evalInPage(cdp, `

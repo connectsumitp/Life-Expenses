@@ -569,6 +569,7 @@ function App() {
   const [newCategoryDraft, setNewCategoryDraft] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
   const [newAccountDraft, setNewAccountDraft] = useState("");
+  const allocationEditRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -834,7 +835,25 @@ function App() {
   }
 
   function updateAllocationTarget(bucketName, nextValue) {
-    setAllocationTargets((current) => rebalanceAllocationTarget(current, bucketName, nextValue));
+    setAllocationTargets((current) => {
+      const editBase =
+        allocationEditRef.current?.bucketName === bucketName && allocationEditRef.current?.targets
+          ? allocationEditRef.current.targets
+          : current;
+      return rebalanceAllocationTarget(editBase, bucketName, nextValue);
+    });
+  }
+
+  function beginAllocationTargetEdit(bucketName, event) {
+    allocationEditRef.current = {
+      bucketName,
+      targets: allocationTargets,
+    };
+    numericFieldFocus(event);
+  }
+
+  function finishAllocationTargetEdit() {
+    allocationEditRef.current = null;
   }
 
   function completeBudgetSetup() {
@@ -1897,7 +1916,13 @@ function App() {
                     type="number"
                     placeholder="0"
                     value={numericInputValue(allocationTargets[key])}
-                    onFocus={numericFieldFocus}
+                    onFocus={(event) => beginAllocationTargetEdit(key, event)}
+                    onBlur={finishAllocationTargetEdit}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.currentTarget.blur();
+                      }
+                    }}
                     onChange={(event) => updateAllocationTarget(key, event.target.value)}
                   />
                   <small>Actual {analytics.allocations[key]}%</small>
