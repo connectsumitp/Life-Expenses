@@ -68,7 +68,6 @@ const ENTRY_TABS = [
 ];
 
 const PERIOD_TABS = [
-  { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
   { id: "yearly", label: "Yearly" },
 ];
@@ -442,14 +441,38 @@ function rebalanceAllocationTarget(targets, bucketName, nextValue) {
   const selectedValue = Math.max(0, Math.min(100, Number(nextValue || 0)));
   const otherKeys = ALLOCATION_KEYS.filter((key) => key !== bucketName);
   const remaining = 100 - selectedValue;
-  const otherTotal = otherKeys.reduce((sum, key) => sum + Number(targets[key] || 0), 0);
-  let firstOther = otherTotal > 0 ? Math.round((Number(targets[otherKeys[0]] || 0) / otherTotal) * remaining) : Math.round(remaining / 2);
-  firstOther = Math.max(0, Math.min(remaining, firstOther));
+  const firstOther = Math.floor(remaining / 2);
   return {
     ...targets,
     [bucketName]: selectedValue,
     [otherKeys[0]]: firstOther,
     [otherKeys[1]]: remaining - firstOther,
+  };
+}
+
+function getDefaultAllocationAnchor(bucketName) {
+  if (bucketName === "savings") return "wants";
+  return "savings";
+}
+
+function rebalanceAllocationTargetWithAnchor(targets, bucketName, nextValue, anchorKey) {
+  const selectedValue = Math.max(0, Math.min(100, Number(nextValue || 0)));
+  const otherKeys = ALLOCATION_KEYS.filter((key) => key !== bucketName);
+  const safeAnchor = otherKeys.includes(anchorKey) ? anchorKey : getDefaultAllocationAnchor(bucketName);
+  const anchoredKey = otherKeys.includes(safeAnchor) ? safeAnchor : otherKeys[0];
+  const remainderKey = otherKeys.find((key) => key !== anchoredKey);
+  const remaining = 100 - selectedValue;
+  const preferredAnchorValue =
+    anchorKey && otherKeys.includes(anchorKey)
+      ? Number(targets[anchoredKey] ?? DEFAULT_ALLOCATION_TARGETS[anchoredKey])
+      : Number(DEFAULT_ALLOCATION_TARGETS[anchoredKey]);
+  const anchoredValue = Math.max(0, Math.min(remaining, preferredAnchorValue));
+
+  return {
+    ...targets,
+    [bucketName]: selectedValue,
+    [anchoredKey]: anchoredValue,
+    [remainderKey]: remaining - anchoredValue,
   };
 }
 
@@ -537,7 +560,7 @@ function App() {
   const [assetName, setAssetName] = useState("");
   const [assetType, setAssetType] = useState("Bank");
   const [detailTab, setDetailTab] = useState("accounts");
-  const [periodTab, setPeriodTab] = useState("weekly");
+  const [periodTab, setPeriodTab] = useState("monthly");
   const [plannerTab, setPlannerTab] = useState("insights");
   const [journalCategory, setJournalCategory] = useState("all");
   const [journalMonth, setJournalMonth] = useState("all");
@@ -570,6 +593,7 @@ function App() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [newAccountDraft, setNewAccountDraft] = useState("");
   const allocationEditRef = useRef(null);
+  const allocationLastEditedRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
@@ -840,12 +864,14 @@ function App() {
         allocationEditRef.current?.bucketName === bucketName && allocationEditRef.current?.targets
           ? allocationEditRef.current.targets
           : current;
-      return rebalanceAllocationTarget(editBase, bucketName, nextValue);
+      const anchorKey = allocationEditRef.current?.anchorKey || allocationLastEditedRef.current;
+      return rebalanceAllocationTargetWithAnchor(editBase, bucketName, nextValue, anchorKey);
     });
   }
 
   function beginAllocationTargetEdit(bucketName, event) {
     allocationEditRef.current = {
+      anchorKey: allocationLastEditedRef.current,
       bucketName,
       targets: allocationTargets,
     };
@@ -853,6 +879,9 @@ function App() {
   }
 
   function finishAllocationTargetEdit() {
+    if (allocationEditRef.current?.bucketName) {
+      allocationLastEditedRef.current = allocationEditRef.current.bucketName;
+    }
     allocationEditRef.current = null;
   }
 
@@ -2729,6 +2758,12 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     if (transaction.direction !== "income") return false;
     return matchesMetricPeriod(transaction);
   });
+  const chartExpenseTransactions = filterVelocityTransactions(expenseTransactions, period, now);
+  const chartIncomeTransactions = filterVelocityTransactions(
+    transactions.filter((transaction) => transaction.direction === "income"),
+    period,
+    now,
+  );
   const metricBudgetTarget =
     period === "weekly"
       ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
@@ -2745,21 +2780,33 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const total = totals.needs + totals.wants + totals.savings;
   const monthlyIncome = monthlyIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const metricIncome = metricIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const chartTotals = chartExpenseTransactions.reduce(
+    (memo, transaction) => {
+      const key = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
+      if (memo[key] === undefined) memo[key] = 0;
+      memo[key] += Number(transaction.amount || 0);
+      return memo;
+    },
+    { needs: 0, wants: 0, savings: 0 },
+  );
+  const chartTotal = chartTotals.needs + chartTotals.wants + chartTotals.savings;
+  const chartIncome = chartIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const chartAllocationBase = chartIncome || chartTotal;
   const allocationBase = metricIncome || total;
   const computedTotalBurn = totals.needs + totals.wants;
-  const computedSavingsRate = allocationBase ? Math.round((totals.savings / allocationBase) * 100) : 0;
-  const computedUnplanned = Math.max(0, totals.wants - allocationBase * ((allocationTargets.wants || DEFAULT_ALLOCATION_TARGETS.wants) / 100));
+  const computedSavingsRate = chartAllocationBase ? Math.round((chartTotals.savings / chartAllocationBase) * 100) : 0;
+  const computedUnplanned = Math.max(0, chartTotals.wants - chartAllocationBase * ((allocationTargets.wants || DEFAULT_ALLOCATION_TARGETS.wants) / 100));
   const totalBurn = computedTotalBurn;
   const savingsRate = computedSavingsRate;
   const unplanned = computedUnplanned;
   const allocations = {
-    needs: allocationBase ? Math.round((totals.needs / allocationBase) * 100) : 0,
-    wants: allocationBase ? Math.round((totals.wants / allocationBase) * 100) : 0,
-    savings: allocationBase ? Math.round((totals.savings / allocationBase) * 100) : 0,
+    needs: chartAllocationBase ? Math.round((chartTotals.needs / chartAllocationBase) * 100) : 0,
+    wants: chartAllocationBase ? Math.round((chartTotals.wants / chartAllocationBase) * 100) : 0,
+    savings: chartAllocationBase ? Math.max(0, 100 - Math.round((chartTotals.needs / chartAllocationBase) * 100) - Math.round((chartTotals.wants / chartAllocationBase) * 100)) : 0,
   };
   const velocity = buildVelocity(expenseTransactions, period, now);
   const chartTarget =
-    period === "weekly"
+    period === "monthly"
       ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
       : period === "yearly"
         ? Number(budgets.monthlyTotal || 0) * (now.getMonth() + 1)
@@ -2770,9 +2817,11 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     targetCopy:
       period === "weekly"
         ? "The dotted line is one quarter of the monthly budget, used as a week-by-week pacing target."
+        : period === "monthly"
+          ? "The dotted line is one quarter of the monthly budget, used as a W1-W4 pacing target."
         : period === "yearly"
           ? "The dotted line is the year-to-date budget target across months elapsed this year."
-          : "The dotted line is the monthly budget target for each month in the year view.",
+          : "The dotted line is the monthly budget target.",
     varianceLabel: chartVariance > 0 ? `Over ₹${formatMoney(chartVariance)}` : `Behind ₹${formatMoney(Math.abs(chartVariance))}`,
     varianceCopy:
       chartVariance > 0
@@ -2801,12 +2850,12 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     .map((slice) => ({
       name: slice.name,
       color: slice.color,
-      value: metricExpenseTransactions
+      value: chartExpenseTransactions
         .filter((transaction) => transaction.category === slice.name)
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }))
     .filter((slice) => slice.value > 0);
-  const graphDetails = buildGraphDetails(expenseTransactions, metricExpenseTransactions, accounts, period, now);
+  const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, accounts, period, now);
   const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
   const monthlyBudgetSpent = categoryProgress.reduce((sum, item) => sum + item.spent, 0);
@@ -2917,7 +2966,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     monthlyBudgetSpent,
     nextRecurring,
     overspend,
-    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Weekly",
+    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Monthly",
     portfolioTotal,
     recurringMonthlyLoad,
     review,
@@ -2997,7 +3046,7 @@ function buildAnalyticsLegacy(transactions, accounts, assets, remoteMetrics, per
     liquidityTotal,
     marketShare,
     marketTotal,
-    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Weekly",
+    periodLabel: PERIOD_TABS.find((tab) => tab.id === period)?.label || "Monthly",
     portfolioTotal,
     savingsRate,
     totalBurn,
@@ -3010,11 +3059,16 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
   const currentYear = anchorDate.getFullYear();
   const currentMonth = anchorDate.getMonth() + 1;
   if (period === "monthly") {
-    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return monthLabels.map((label, index) => ({
-      label,
+    return [1, 2, 3, 4].map((week) => ({
+      label: `W${week}`,
       burn: expenseTransactions
-        .filter((transaction) => Number(transaction.year || 0) === currentYear && Number(transaction.monthNumber || 0) === index + 1 && transaction.bucket !== "Savings")
+        .filter(
+          (transaction) =>
+            Number(transaction.year || 0) === currentYear &&
+            Number(transaction.monthNumber || 0) === currentMonth &&
+            Number(transaction.weekOfMonth || 1) === week &&
+            transaction.bucket !== "Savings",
+        )
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }));
   }
@@ -3108,7 +3162,9 @@ function filterVelocityTransactions(expenseTransactions, period, anchorDate = ne
     });
   }
   if (period === "monthly") {
-    return expenseTransactions.filter((transaction) => Number(transaction.year || 0) === currentYear);
+    return expenseTransactions.filter(
+      (transaction) => Number(transaction.year || 0) === currentYear && Number(transaction.monthNumber || 0) === currentMonth,
+    );
   }
   return expenseTransactions.filter(
     (transaction) => Number(transaction.year || 0) === currentYear && Number(transaction.monthNumber || 0) === currentMonth,
@@ -3118,8 +3174,7 @@ function filterVelocityTransactions(expenseTransactions, period, anchorDate = ne
 function getVelocityGroupLabel(transaction, period) {
   if (period === "yearly") return String(transaction.year || "Unknown");
   if (period === "monthly") {
-    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return monthLabels[Math.max(0, Number(transaction.monthNumber || 1) - 1)] || "Unknown";
+    return `W${Number(transaction.weekOfMonth || 1)}`;
   }
   return `W${Number(transaction.weekOfMonth || 1)}`;
 }

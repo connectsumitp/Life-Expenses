@@ -288,7 +288,7 @@ async function scanLayout(cdp, device) {
         hasStep1: text.includes("Step 1"),
         hasFlow: /\\bFlow\\b/i.test(text),
         hasTabs: ["expenses", "income", "assets"].every((label) => text.toLowerCase().includes(label)),
-        hasPeriods: ["weekly", "monthly", "yearly"].every((label) => text.toLowerCase().includes(label)),
+        periodLabels: [...document.querySelectorAll(".period-tab")].map((button) => button.innerText.trim()),
         hasPlanner: ["budget", "recurring", "insights", "review"].every((label) => text.toLowerCase().includes(label)),
         hasPortfolioPulse: text.toLowerCase().includes("portfolio pulse"),
         recentRows: document.querySelectorAll(".recent-list .transaction-row").length,
@@ -305,7 +305,7 @@ async function scanLayout(cdp, device) {
   record(`${device.name}: required modules render`, data.missing.length === 0, JSON.stringify(data.missing));
   record(`${device.name}: no horizontal overflow`, data.horizontalOverflow <= 3 && data.outOfBounds.length === 0, JSON.stringify({ overflow: data.horizontalOverflow, outOfBounds: data.outOfBounds }));
   record(`${device.name}: Step/Flow removed`, !data.hasStep1 && !data.hasFlow, JSON.stringify({ hasStep1: data.hasStep1, hasFlow: data.hasFlow }));
-  record(`${device.name}: tabs and period controls visible`, data.hasTabs && data.hasPeriods, "");
+  record(`${device.name}: tabs and period controls visible`, data.hasTabs && data.periodLabels.length === 2 && data.periodLabels.includes("Monthly") && data.periodLabels.includes("Yearly") && !data.periodLabels.includes("Weekly"), JSON.stringify(data.periodLabels));
   record(`${device.name}: dashboard actions do not overlap`, !data.actionOverlap, "");
   record(`${device.name}: planning console tabs visible`, data.hasPlanner, "");
   record(`${device.name}: portfolio pulse present at BTF`, data.hasPortfolioPulse, "");
@@ -477,6 +477,19 @@ async function runInteractionTests(cdp) {
     })()
   `);
   record("allocation typing uses final value without split drift", savingsSplitStable.values[0] === 50 && savingsSplitStable.values[1] === 30 && savingsSplitStable.values[2] === 20 && savingsSplitStable.sum === 100, JSON.stringify(savingsSplitStable));
+
+  await typeIntoFocusedInput(cdp, "input[aria-label='Wants allocation target']", "30");
+  await wait(150);
+  const pairedSplitStable = await evalInPage(cdp, `
+    (() => {
+      const values = ["Needs", "Wants", "Savings"].map((label) => Number(document.querySelector(\`input[aria-label='\${label} allocation target']\`)?.value || 0));
+      return {
+        values,
+        sum: values.reduce((total, value) => total + value, 0),
+      };
+    })()
+  `);
+  record("allocation paired edits resolve to 50 30 20", pairedSplitStable.values[0] === 50 && pairedSplitStable.values[1] === 30 && pairedSplitStable.values[2] === 20 && pairedSplitStable.sum === 100, JSON.stringify(pairedSplitStable));
 
   await setNativeValue(cdp, "input[aria-label='Needs allocation target']", "080");
   await wait(150);
@@ -704,24 +717,19 @@ async function runInteractionTests(cdp) {
   const assetSync = await evalInPage(cdp, `window.__uatPosts.some((post) => post.action === "updateGroww")`);
   record("portfolio asset sync posts updateGroww", assetSync, "");
 
-  const weeklyBurn = await evalInPage(cdp, `
-    (() => {
-      const card = [...document.querySelectorAll(".metric-card")].find((item) => item.innerText.includes("Total Burn"));
-      return Number((card?.querySelector("strong")?.innerText || "").replace(/[^0-9.]/g, ""));
-    })()
-  `);
-  await evalInPage(cdp, `[...document.querySelectorAll(".period-tab")].find((button) => button.innerText === "Monthly").click()`);
-  await wait(200);
   const monthly = await evalInPage(cdp, `
     (() => {
       const card = [...document.querySelectorAll(".metric-card")].find((item) => item.innerText.includes("Total Burn"));
       return {
+        active: document.querySelector(".period-tab.is-active")?.innerText || "",
+        hasWeekly: [...document.querySelectorAll(".period-tab")].some((button) => button.innerText === "Weekly"),
         title: document.body.innerText.toLowerCase().includes("monthly burn profile"),
+        weeklyTrendLabels: ["W1", "W2", "W3", "W4"].every((label) => document.body.innerText.includes(label)),
         burn: Number((card?.querySelector("strong")?.innerText || "").replace(/[^0-9.]/g, "")),
       };
     })()
   `);
-  record("monthly tab updates graph title and burn scope", monthly.title && monthly.burn >= weeklyBurn && monthly.burn !== weeklyBurn, JSON.stringify({ weeklyBurn, monthly }));
+  record("monthly is default with weekly trend chart and weekly period removed", monthly.active === "Monthly" && !monthly.hasWeekly && monthly.title && monthly.weeklyTrendLabels && monthly.burn > 0, JSON.stringify(monthly));
   await evalInPage(cdp, `[...document.querySelectorAll(".period-tab")].find((button) => button.innerText === "Yearly").click()`);
   await wait(200);
   const yearly = await evalInPage(cdp, `
@@ -756,7 +764,7 @@ async function runInteractionTests(cdp) {
       logs: document.querySelectorAll(".graph-log-row").length,
     }))()
   `);
-  record("pie graph opens categorized spend modal", pieModal.open && pieModal.title && pieModal.groups > 0 && pieModal.logs > 0, JSON.stringify(pieModal));
+  record("pie graph opens categorized spend modal", pieModal.open && pieModal.title && pieModal.groups > 1 && pieModal.logs > 1, JSON.stringify(pieModal));
   await evalInPage(cdp, `document.querySelector("button[aria-label='Close graph detail']").click()`);
   await wait(100);
 
@@ -770,7 +778,7 @@ async function runInteractionTests(cdp) {
       logs: document.querySelectorAll(".graph-log-row").length,
     }))()
   `);
-  record("allocation tracker opens bucket detail modal", allocationModal.open && allocationModal.title && allocationModal.hasNeeds && allocationModal.logs > 0, JSON.stringify(allocationModal));
+  record("allocation tracker opens bucket detail modal", allocationModal.open && allocationModal.title && allocationModal.hasNeeds && allocationModal.logs > 1, JSON.stringify(allocationModal));
   await evalInPage(cdp, `document.querySelector("button[aria-label='Close graph detail']").click()`);
   await wait(100);
 
@@ -851,8 +859,6 @@ async function runEdgeCaseTests(cdp) {
   `);
   record("long custom category stays inside layout", longCategoryLayout.exists && longCategoryLayout.overflow <= 3 && longCategoryLayout.right <= 1442, JSON.stringify(longCategoryLayout));
 
-  await evalInPage(cdp, `[...document.querySelectorAll(".period-tab")].find((button) => button.innerText === "Weekly").click()`);
-  await wait(120);
   await evalInPage(cdp, `document.querySelector(".pie-card .chart-expand-button").click()`);
   await wait(150);
   const modalCloseByX = await evalInPage(cdp, `!!document.querySelector(".graph-detail-sheet")`);
