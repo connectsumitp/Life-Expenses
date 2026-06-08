@@ -162,6 +162,8 @@ const STORAGE_KEYS = {
   userProfile: "life-expenses.userProfile",
 };
 
+const DEFAULT_WORKSPACE_ID = "default-user";
+
 function makeUserId(identity) {
   const source = String(identity || "").trim().toLowerCase();
   let hash = 5381;
@@ -320,6 +322,19 @@ function writeStoredValue(key, value) {
   } catch {
     // Local persistence is a convenience layer; the app should keep running if storage is unavailable.
   }
+}
+
+function getTransactionUserId(userId) {
+  return userId || DEFAULT_WORKSPACE_ID;
+}
+
+function readStoredTransactions(userId) {
+  const transactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, getTransactionUserId(userId)), []);
+  return Array.isArray(transactions) ? mergeTransactions(transactions, []) : [];
+}
+
+function writeStoredTransactions(userId, transactions) {
+  writeStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, getTransactionUserId(userId)), mergeTransactions(transactions, []).slice(0, 250));
 }
 
 function getInitialUserProfile() {
@@ -532,8 +547,7 @@ function App() {
   const [journalNoteMode, setJournalNoteMode] = useState("all");
   const [transactions, setTransactions] = useState(() => {
     if (!activeUserId) return DEMO_TRANSACTIONS;
-    const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), []);
-    return Array.isArray(localTransactions) ? localTransactions : [];
+    return readStoredTransactions(activeUserId);
   });
   const [assets, setAssets] = useState({ mutualFunds: 126000, stocks: 72500 });
   const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), DEFAULT_ALLOCATION_TARGETS)));
@@ -565,8 +579,7 @@ function App() {
         if (!alive || !data) return;
         if (Array.isArray(data.transactions)) {
           const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-          const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), []);
-          setTransactions(mergeTransactions(remoteTransactions, Array.isArray(localTransactions) ? localTransactions : []));
+          setTransactions(mergeTransactions(remoteTransactions, readStoredTransactions(activeUserId)));
         }
         if (Array.isArray(data.categories) && data.categories.length) {
           const nextCategories = normalizeCategories(data.categories);
@@ -607,8 +620,7 @@ function App() {
     if (!getConfiguredWorkspaceProfile() && !normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null))) {
       writeStoredValue(STORAGE_KEYS.ownerProfile, userProfile);
     }
-    const localTransactions = readStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, userProfile.userId), []);
-    setTransactions(Array.isArray(localTransactions) ? localTransactions : []);
+    setTransactions(readStoredTransactions(userProfile.userId));
     setExpenseCategories(nextCategories);
     setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
     setAccounts(normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, userProfile.userId), DEFAULT_ACCOUNTS)));
@@ -667,7 +679,7 @@ function App() {
 
   useEffect(() => {
     if (!activeUserId) return;
-    writeStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), transactions.slice(0, 250));
+    writeStoredTransactions(activeUserId, transactions);
   }, [transactions, activeUserId]);
 
   const analytics = useMemo(
@@ -1178,7 +1190,7 @@ function App() {
     if (direction === "expense") entry.bucket = activeBucket;
     setTransactions((current) => {
       const nextTransactions = [entry, ...current];
-      if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.transactions, activeUserId), nextTransactions.slice(0, 250));
+      writeStoredTransactions(activeUserId, nextTransactions);
       return nextTransactions;
     });
     const nextAccounts = adjustAccount(selectedAccount, direction === "expense" ? -numericAmount : numericAmount);
