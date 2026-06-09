@@ -108,15 +108,29 @@ function normalizeRecurring_(rules) {
   return output;
 }
 
+function isDateValue_(value) {
+  return Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime());
+}
+
+function formatMaybeDate_(value, pattern) {
+  if (isDateValue_(value)) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), pattern);
+  }
+  return value === undefined || value === null ? "" : String(value);
+}
+
 function normalizeReturnedTransaction_(transaction) {
+  var timestampDate = isDateValue_(transaction.timestamp) ? transaction.timestamp : null;
+  var dateCell = isDateValue_(transaction.date) ? transaction.date : timestampDate;
+  var monthCell = isDateValue_(transaction.monthString) ? transaction.monthString : dateCell;
   return {
     id: transaction.id || "",
-    timestamp: transaction.timestamp || "",
-    date: transaction.date || "",
-    dayString: transaction.dayString || "",
-    monthString: transaction.monthString || "",
-    monthNumber: Number(transaction.monthNumber || 0),
-    year: Number(transaction.year || 0),
+    timestamp: isDateValue_(transaction.timestamp) ? isoString_(transaction.timestamp) : String(transaction.timestamp || ""),
+    date: formatMaybeDate_(transaction.date, "yyyy-MM-dd"),
+    dayString: transaction.dayString ? formatMaybeDate_(transaction.dayString, "EEE") : (dateCell ? formatMaybeDate_(dateCell, "EEE") : ""),
+    monthString: transaction.monthString ? formatMaybeDate_(transaction.monthString, "MMM yyyy") : (monthCell ? formatMaybeDate_(monthCell, "MMM yyyy") : ""),
+    monthNumber: Number(transaction.monthNumber || (dateCell ? formatMaybeDate_(dateCell, "M") : 0)),
+    year: Number(transaction.year || (dateCell ? formatMaybeDate_(dateCell, "yyyy") : 0)),
     weekNumber: Number(transaction.weekNumber || 0),
     weekOfMonth: Number(transaction.weekOfMonth || 0),
     direction: transaction.direction || "expense",

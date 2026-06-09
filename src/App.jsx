@@ -176,7 +176,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_WORKSPACE_ID = "default-user";
-const BROWSER_STORAGE_VERSION = `bridge:${APPS_SCRIPT_URL || "demo"}:2026-06-clean-sheet-mobile-reset-v2`;
+const BROWSER_STORAGE_VERSION = `bridge:${APPS_SCRIPT_URL || "demo"}:2026-06-clean-sheet-mobile-reset-v3`;
 
 function resetStaleBridgeStorage() {
   if (typeof window === "undefined") return;
@@ -184,7 +184,7 @@ function resetStaleBridgeStorage() {
     const storedVersion = window.localStorage.getItem(STORAGE_KEYS.bridgeVersion);
     if (storedVersion === BROWSER_STORAGE_VERSION) return;
     Object.keys(window.localStorage)
-      .filter((key) => key.startsWith("life-expenses.") && key !== STORAGE_KEYS.bridgeVersion)
+      .filter((key) => key.startsWith("life-expenses.") && ![STORAGE_KEYS.bridgeVersion, STORAGE_KEYS.userProfile].includes(key))
       .forEach((key) => window.localStorage.removeItem(key));
     window.localStorage.setItem(STORAGE_KEYS.bridgeVersion, BROWSER_STORAGE_VERSION);
   } catch {
