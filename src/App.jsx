@@ -35,7 +35,8 @@ import {
   X,
 } from "lucide-react";
 
-const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
+const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec";
+const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL).trim();
 const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
 const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
 const CONFIGURED_WORKSPACE_USER_ID = (import.meta.env.VITE_WORKSPACE_USER_ID || "").trim();
@@ -598,6 +599,7 @@ function App() {
   const [ripples, setRipples] = useState([]);
   const [undoStack, setUndoStack] = useState([]);
   const [status, setStatus] = useState(APPS_SCRIPT_URL ? "Bridge ready" : "Demo mode");
+  const [hydrating, setHydrating] = useState(Boolean(APPS_SCRIPT_URL && activeUserId));
   const [busy, setBusy] = useState(false);
   const [addingCategory, setAddingCategory] = useState(false);
   const [newCategoryDraft, setNewCategoryDraft] = useState("");
@@ -610,6 +612,7 @@ function App() {
     let alive = true;
     async function hydrate() {
       if (!APPS_SCRIPT_URL || !activeUserId) return;
+      setHydrating(true);
       try {
         const data = await apiGetDashboard(activeUserId);
         if (!alive || !data) return;
@@ -642,6 +645,8 @@ function App() {
         setStatus("Updated");
       } catch {
         if (alive) setStatus("Bridge unavailable");
+      } finally {
+        if (alive) setHydrating(false);
       }
     }
     hydrate();
@@ -654,9 +659,6 @@ function App() {
     if (!userProfile) return;
     const nextCategories = readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, userProfile.userId), DEFAULT_CATEGORIES);
     writeStoredValue(STORAGE_KEYS.userProfile, userProfile);
-    if (!getConfiguredWorkspaceProfile() && !normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null))) {
-      writeStoredValue(STORAGE_KEYS.ownerProfile, userProfile);
-    }
     setTransactions(readStoredTransactions(userProfile.userId));
     setExpenseCategories(nextCategories);
     setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
@@ -982,15 +984,11 @@ function App() {
       return;
     }
     const configuredProfile = getConfiguredWorkspaceProfile();
-    const localOwnerProfile = configuredProfile || getLocalOwnerProfile();
-    if (localOwnerProfile && !profilesMatch(profile, localOwnerProfile)) {
+    if (configuredProfile && !profilesMatch(profile, configuredProfile)) {
       setStatus("Email or private key does not match");
       return;
     }
-    if (!configuredProfile && !localOwnerProfile) {
-      writeStoredValue(STORAGE_KEYS.ownerProfile, profile);
-    }
-    const activeProfile = localOwnerProfile ? { ...localOwnerProfile, label: profile.label } : profile;
+    const activeProfile = configuredProfile ? { ...configuredProfile, label: profile.label } : profile;
     setUserProfile(activeProfile);
     setUserEmailDraft(activeProfile.email);
     setUserKeyDraft(activeProfile.privateKey);
@@ -1427,6 +1425,7 @@ function App() {
         <div className="panel-kicker">
           <CalendarDays size={16} />
           <span>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+          <strong className={hydrating ? "is-loading" : ""}>{hydrating ? "Loading workspace" : status}</strong>
         </div>
 
         <div className="journal-title">
@@ -2892,7 +2891,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, accounts, period, now);
   const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
-  const monthlyBudgetSpent = categoryProgress.reduce((sum, item) => sum + item.spent, 0);
+  const monthlyBudgetSpent = computedTotalBurn;
   const overspend = Math.max(0, monthlyBudgetSpent - Number(budgets.monthlyTotal || 0));
   const budgetRemaining = Math.max(0, metricBudgetTarget - computedTotalBurn);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();

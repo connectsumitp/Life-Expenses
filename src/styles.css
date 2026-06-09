@@ -193,6 +193,23 @@ button:active {
   text-transform: uppercase;
 }
 
+.panel-kicker {
+  flex-wrap: wrap;
+}
+
+.panel-kicker strong {
+  overflow: hidden;
+  color: rgba(43, 45, 66, 0.68);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-kicker strong.is-loading {
+  color: #9d6242;
+}
+
 .journal-title h1,
 .dashboard-header h2,
 .card-heading h3,
@@ -2955,8 +2972,7 @@ button:active {
     gap: 8px;
   }
 
-  .recent-stack:not(.is-open) .journal-filters,
-  .recent-stack:not(.is-open) .recent-list {
+  .recent-stack:not(.is-open) .journal-filters {
     display: none;
   }
 

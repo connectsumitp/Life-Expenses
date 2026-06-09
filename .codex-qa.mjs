@@ -327,8 +327,11 @@ async function runInteractionTests(cdp) {
   await setNativeValue(cdp, ".user-gate input[type='password']", "wrong-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(150);
-  const wrongWorkspaceBlocked = await evalInPage(cdp, `Boolean(document.querySelector(".user-gate"))`);
-  record("workspace gate blocks wrong private key", wrongWorkspaceBlocked, "");
+  const alternateWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
+  record("workspace gate treats alternate private key as separate workspace", alternateWorkspaceOpens, "");
+  await evalInPage(cdp, `document.querySelector(".user-chip").click()`);
+  await wait(150);
+  await setNativeValue(cdp, ".user-gate input[type='email']", "uat@example.com");
   await setNativeValue(cdp, ".user-gate input[type='password']", "uat-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(250);
@@ -658,7 +661,7 @@ async function runInteractionTests(cdp) {
       recentTop: document.querySelector(".recent-list .transaction-row")?.innerText || "",
     }))()
   `);
-  record("expense log posts selected date user and clears fields", expenseLogged.posted && expenseLogged.postedUser === "user-uat" && expenseLogged.postedDate === "2026-07-20" && expenseLogged.postedMonth === "Jul 2026" && expenseLogged.amountCleared && expenseLogged.dateReset && expenseLogged.noteCleared, JSON.stringify(expenseLogged));
+  record("expense log posts selected date user and clears fields", expenseLogged.posted && expenseLogged.postedUser === "user-v2w4d4" && expenseLogged.postedDate === "2026-07-20" && expenseLogged.postedMonth === "Jul 2026" && expenseLogged.amountCleared && expenseLogged.dateReset && expenseLogged.noteCleared, JSON.stringify(expenseLogged));
 
   await navigateForDevice(cdp, { ...devices[0], name: "desktop-refresh-after-expense" });
   await waitForPageReady(cdp);
@@ -895,12 +898,13 @@ async function runEdgeCaseTests(cdp) {
     (() => ({
       logVisible: getComputedStyle(document.querySelector(".journal-panel")).display !== "none",
       dashboardHidden: getComputedStyle(document.querySelector(".dashboard-panel")).display === "none",
-      recentCollapsed: getComputedStyle(document.querySelector(".recent-list")).display === "none",
+      recentVisible: getComputedStyle(document.querySelector(".recent-list")).display !== "none",
+      recentRows: document.querySelectorAll(".recent-list .transaction-row").length,
       navVisible: getComputedStyle(document.querySelector(".mobile-shell-nav")).display !== "none",
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth,
     }))()
   `);
-  record("mobile log page is primary and recent journal is collapsed", mobileInitial.logVisible && mobileInitial.dashboardHidden && mobileInitial.recentCollapsed && mobileInitial.navVisible && mobileInitial.overflow <= 3, JSON.stringify(mobileInitial));
+  record("mobile log page is primary with recent journal preview", mobileInitial.logVisible && mobileInitial.dashboardHidden && mobileInitial.recentVisible && mobileInitial.recentRows > 0 && mobileInitial.navVisible && mobileInitial.overflow <= 3, JSON.stringify(mobileInitial));
 
   await evalInPage(cdp, `[...document.querySelectorAll(".mobile-shell-nav button")].find((button) => button.innerText.includes("Dashboard")).click()`);
   await wait(180);
