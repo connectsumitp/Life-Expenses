@@ -288,7 +288,9 @@ async function apiGetDashboard(userId) {
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Dashboard read failed");
-  return response.json();
+  const data = await response.json();
+  if (data?.ok === false) throw new Error(data.error || "Dashboard read failed");
+  return data;
 }
 
 async function apiPost(action, payload, userId) {
@@ -299,7 +301,9 @@ async function apiPost(action, payload, userId) {
     body: JSON.stringify({ action, userId, ...payload }),
   });
   if (!response.ok) throw new Error(`${action} write failed`);
-  return response.json();
+  const data = await response.json();
+  if (data?.ok === false) throw new Error(data.error || `${action} write failed`);
+  return data;
 }
 
 function formatMoney(value) {
@@ -611,12 +615,8 @@ function App() {
         if (!alive || !data) return;
         if (Array.isArray(data.transactions)) {
           const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-          const localTransactions = readStoredTransactions(activeUserId);
-          const localOnlyTransactions = findLocalOnlyTransactions(remoteTransactions, localTransactions);
-          setTransactions(mergeTransactions(remoteTransactions, localTransactions));
-          if (localOnlyTransactions.length) {
-            syncLocalTransactionsToBridge(localOnlyTransactions);
-          }
+          setTransactions(remoteTransactions);
+          writeStoredTransactions(activeUserId, remoteTransactions);
         }
         if (Array.isArray(data.categories) && data.categories.length) {
           const nextCategories = normalizeCategories(data.categories);
@@ -626,7 +626,7 @@ function App() {
         if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
         if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
         if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
-        if (Array.isArray(data.accounts)) setAccounts((current) => mergeAccounts(normalizeAccounts(data.accounts), current));
+        if (Array.isArray(data.accounts)) setAccounts(normalizeAccounts(data.accounts));
         if (data.assets) setAssets(normalizeAssets(data.assets));
         if (data.cells) {
           setAssets({
@@ -760,7 +760,8 @@ function App() {
     if (!data) return;
     if (Array.isArray(data.transactions)) {
       const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-      setTransactions((current) => mergeTransactions(remoteTransactions, current));
+      setTransactions(remoteTransactions);
+      if (activeUserId) writeStoredTransactions(activeUserId, remoteTransactions);
     }
     if (Array.isArray(data.categories) && data.categories.length) {
       const nextCategories = normalizeCategories(data.categories);
@@ -770,7 +771,7 @@ function App() {
     if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
     if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
     if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
-    if (Array.isArray(data.accounts)) setAccounts((current) => mergeAccounts(normalizeAccounts(data.accounts), current));
+    if (Array.isArray(data.accounts)) setAccounts(normalizeAccounts(data.accounts));
     if (data.assets) setAssets(normalizeAssets(data.assets));
     if (data.cells) {
       setAssets({

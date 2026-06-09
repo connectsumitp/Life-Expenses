@@ -677,7 +677,7 @@ async function runInteractionTests(cdp) {
       };
     })()
   `);
-  record("expense log survives refresh and replays cached row to bridge", refreshState.bodyHasNote && refreshState.bodyHasAmount && refreshState.storedHasNote && refreshState.replayedToBridge, JSON.stringify(refreshState));
+  record("expense log refresh uses bridge as source of truth", !refreshState.bodyHasNote && !refreshState.bodyHasAmount && !refreshState.storedHasNote && !refreshState.replayedToBridge, JSON.stringify(refreshState));
 
   await evalInPage(cdp, `document.querySelector(".entry-tab[aria-selected='false']").click()`);
   await wait(250);
