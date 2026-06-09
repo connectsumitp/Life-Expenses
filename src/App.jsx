@@ -164,6 +164,7 @@ const DEFAULT_RECURRING_RULES = [
 const STORAGE_KEYS = {
   accounts: "life-expenses.accounts",
   allocationTargets: "life-expenses.allocationTargets",
+  bridgeVersion: "life-expenses.bridgeVersion",
   budgetSetupComplete: "life-expenses.budgetSetupComplete",
   budgets: "life-expenses.budgets",
   categoryBuckets: "life-expenses.categoryBuckets",
@@ -175,6 +176,21 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_WORKSPACE_ID = "default-user";
+const BROWSER_STORAGE_VERSION = `bridge:${APPS_SCRIPT_URL || "demo"}:2026-06-clean-sheet`;
+
+function resetStaleBridgeStorage() {
+  if (typeof window === "undefined") return;
+  try {
+    const storedVersion = window.localStorage.getItem(STORAGE_KEYS.bridgeVersion);
+    if (storedVersion === BROWSER_STORAGE_VERSION) return;
+    Object.keys(window.localStorage)
+      .filter((key) => key.startsWith("life-expenses.") && key !== STORAGE_KEYS.bridgeVersion)
+      .forEach((key) => window.localStorage.removeItem(key));
+    window.localStorage.setItem(STORAGE_KEYS.bridgeVersion, BROWSER_STORAGE_VERSION);
+  } catch {
+    // Storage is best-effort; bridge reads remain the source of truth.
+  }
+}
 
 function makeUserId(identity) {
   const source = String(identity || "").trim().toLowerCase();
@@ -364,6 +380,7 @@ function writeStoredTransactions(userId, transactions) {
 }
 
 function getInitialUserProfile() {
+  resetStaleBridgeStorage();
   const storedProfile = normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null));
   if (!storedProfile) return null;
   const primaryProfile = getPrimaryWorkspaceProfile();
@@ -630,7 +647,7 @@ function App() {
   const [journalDirection, setJournalDirection] = useState("all");
   const [journalNoteMode, setJournalNoteMode] = useState("all");
   const [transactions, setTransactions] = useState(() => {
-    if (!activeUserId) return DEMO_TRANSACTIONS;
+    if (!activeUserId) return useBridgeSource() ? [] : DEMO_TRANSACTIONS;
     if (useBridgeSource()) return [];
     return readStoredTransactions(activeUserId);
   });
