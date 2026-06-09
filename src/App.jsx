@@ -38,6 +38,7 @@ import {
 const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
 const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
 const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
+const CONFIGURED_WORKSPACE_USER_ID = (import.meta.env.VITE_WORKSPACE_USER_ID || "").trim();
 
 const DEFAULT_CATEGORIES = [
   "Daily Essentials",
@@ -188,11 +189,12 @@ function normalizeUserProfile(profile) {
 
 function getConfiguredWorkspaceProfile() {
   if (!CONFIGURED_WORKSPACE_EMAIL || !CONFIGURED_WORKSPACE_KEY) return null;
-  return normalizeUserProfile({
+  const profile = normalizeUserProfile({
     email: CONFIGURED_WORKSPACE_EMAIL,
     privateKey: CONFIGURED_WORKSPACE_KEY,
     label: CONFIGURED_WORKSPACE_EMAIL.split("@")[0] || "Workspace",
   });
+  return CONFIGURED_WORKSPACE_USER_ID ? { ...profile, userId: CONFIGURED_WORKSPACE_USER_ID } : profile;
 }
 
 function profilesMatch(profile, ownerProfile) {

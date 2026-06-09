@@ -41,6 +41,53 @@ function testFinanceCommandCenterSetup() {
   return true;
 }
 
+function migrateDefaultUserToMyWorkspace() {
+  var email = "connect.sumitp@gmail.com";
+  var privateKey = "123";
+
+  var targetUserId = makeWorkspaceUserId_(email, privateKey);
+  var ss = getWorkbook_();
+  var transactionCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), HEADERS.transactions, "default-user", targetUserId);
+  var accountCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, "default-user", targetUserId);
+  var assetCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.assets, HEADERS.assets), HEADERS.assets, "default-user", targetUserId);
+  var categoryCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.categories, HEADERS.categories), HEADERS.categories, "default-user", targetUserId);
+  var budgetCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.budgets, HEADERS.budgets), HEADERS.budgets, "default-user", targetUserId);
+  var recurringCount = migrateSheetUserId_(ensureSheet_(ss, SHEETS.recurring, HEADERS.recurring), HEADERS.recurring, "default-user", targetUserId);
+
+  Logger.log("Migrated default-user to " + targetUserId);
+  Logger.log("Transactions: " + transactionCount);
+  Logger.log("Accounts: " + accountCount);
+  Logger.log("Assets: " + assetCount);
+  Logger.log("Categories: " + categoryCount);
+  Logger.log("Budgets: " + budgetCount);
+  Logger.log("Recurring: " + recurringCount);
+  return true;
+}
+
+function makeWorkspaceUserId_(email, privateKey) {
+  var source = (String(email || "").trim().toLowerCase() + "::" + String(privateKey || "").trim()).toLowerCase();
+  var hash = 5381;
+  for (var i = 0; i < source.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ source.charCodeAt(i);
+  }
+  return "user-" + Math.abs(hash).toString(36);
+}
+
+function migrateSheetUserId_(sheet, headers, fromUserId, toUserId) {
+  var rows = readObjects_(sheet);
+  var changed = 0;
+  for (var i = 0; i < rows.length; i += 1) {
+    if (normalizeUserId_(rows[i].userId) === fromUserId) {
+      rows[i].userId = toUserId;
+      changed += 1;
+    }
+  }
+  if (changed) {
+    writeObjects_(sheet, headers, rows);
+  }
+  return changed;
+}
+
 function ensureSheet_(ss, name, headers) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
