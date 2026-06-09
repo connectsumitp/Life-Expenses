@@ -35,13 +35,15 @@ import {
   X,
 } from "lucide-react";
 
-const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec";
-const RETIRED_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec";
+const RETIRED_APPS_SCRIPT_URLS = new Set([
+  "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec",
+  "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec",
+]);
 const CONFIGURED_APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
 const APPS_SCRIPT_URL =
-  CONFIGURED_APPS_SCRIPT_URL && CONFIGURED_APPS_SCRIPT_URL !== RETIRED_APPS_SCRIPT_URL
+  CONFIGURED_APPS_SCRIPT_URL && !RETIRED_APPS_SCRIPT_URLS.has(CONFIGURED_APPS_SCRIPT_URL)
     ? CONFIGURED_APPS_SCRIPT_URL
-    : DEFAULT_APPS_SCRIPT_URL;
+    : "";
 const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
 const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
 const CONFIGURED_WORKSPACE_USER_ID = (import.meta.env.VITE_WORKSPACE_USER_ID || "").trim();
