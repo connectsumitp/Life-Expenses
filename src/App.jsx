@@ -3051,11 +3051,11 @@ function buildAnalyticsLegacy(transactions, accounts, assets, remoteMetrics, per
     { needs: 0, wants: 0, savings: 0 },
   );
   const total = totals.needs + totals.wants + totals.savings;
-  const computedTotalBurn = totals.needs + totals.wants;
+  const computedTotalBurn = total;
   const computedSavingsRate = total ? Math.round((totals.savings / total) * 100) : 0;
   const wantTarget = total * 0.3;
   const computedUnplanned = Math.max(0, totals.wants - wantTarget);
-  const totalBurn = remoteMetrics?.totalBurn ?? computedTotalBurn;
+  const totalBurn = computedTotalBurn;
   const savingsRate = remoteMetrics?.savingsRate ?? computedSavingsRate;
   const unplanned = remoteMetrics?.unplanned ?? computedUnplanned;
   const allocations = {
@@ -3198,7 +3198,7 @@ function getGraphDetailConfig(type, analytics) {
 
 function buildGraphDetails(expenseTransactions, metricExpenseTransactions, accounts, period, anchorDate = new Date()) {
   const velocityLabels = buildVelocity(expenseTransactions, period, anchorDate).map((point) => point.label);
-  const velocityTransactions = filterVelocityTransactions(expenseTransactions, period, anchorDate).filter((transaction) => transaction.bucket !== "Savings");
+  const velocityTransactions = filterVelocityTransactions(expenseTransactions, period, anchorDate);
   return {
     velocity: buildTransactionGroups(velocityTransactions, accounts, (transaction) => getVelocityGroupLabel(transaction, period), velocityLabels),
     categories: buildTransactionGroups(metricExpenseTransactions, accounts, (transaction) => transaction.category || "Uncategorized"),
