@@ -176,7 +176,7 @@ const STORAGE_KEYS = {
 };
 
 const DEFAULT_WORKSPACE_ID = "default-user";
-const BROWSER_STORAGE_VERSION = `bridge:${APPS_SCRIPT_URL || "demo"}:2026-06-clean-sheet`;
+const BROWSER_STORAGE_VERSION = `bridge:${APPS_SCRIPT_URL || "demo"}:2026-06-clean-sheet-mobile-reset-v2`;
 
 function resetStaleBridgeStorage() {
   if (typeof window === "undefined") return;
