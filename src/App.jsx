@@ -496,6 +496,11 @@ function normalizeDashboardTransactions(transactions) {
   }));
 }
 
+function findLocalOnlyTransactions(remoteTransactions = [], localTransactions = []) {
+  const remoteIds = new Set(remoteTransactions.map((transaction) => transaction.id).filter(Boolean));
+  return localTransactions.filter((transaction) => transaction?.id && !remoteIds.has(transaction.id));
+}
+
 function getNextDueDate(rule, anchorDate = new Date()) {
   const today = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate());
   if (rule.frequency === "weekly") {
@@ -604,7 +609,12 @@ function App() {
         if (!alive || !data) return;
         if (Array.isArray(data.transactions)) {
           const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-          setTransactions(mergeTransactions(remoteTransactions, readStoredTransactions(activeUserId)));
+          const localTransactions = readStoredTransactions(activeUserId);
+          const localOnlyTransactions = findLocalOnlyTransactions(remoteTransactions, localTransactions);
+          setTransactions(mergeTransactions(remoteTransactions, localTransactions));
+          if (localOnlyTransactions.length) {
+            syncLocalTransactionsToBridge(localOnlyTransactions);
+          }
         }
         if (Array.isArray(data.categories) && data.categories.length) {
           const nextCategories = normalizeCategories(data.categories);
@@ -781,6 +791,27 @@ function App() {
       if (!silent) setStatus("Updated");
     } catch {
       if (!silent) setStatus("Bridge unavailable");
+    }
+  }
+
+  async function syncLocalTransactionsToBridge(localOnlyTransactions) {
+    if (!APPS_SCRIPT_URL || !activeUserId || !localOnlyTransactions.length) return;
+    try {
+      await Promise.all(
+        localOnlyTransactions.map((transaction) =>
+          apiPost(transaction.direction === "income" ? "addIncome" : "addExpense", {
+            ...transaction,
+            type: transaction.bucket,
+            source: transaction.source || transaction.category,
+            account: transaction.account || getAccountName(accounts, transaction.accountId),
+            accountId: transaction.accountId,
+            accounts,
+          }, activeUserId),
+        ),
+      );
+      setStatus(`Synced ${localOnlyTransactions.length} cached ${localOnlyTransactions.length === 1 ? "entry" : "entries"}`);
+    } catch {
+      setStatus("Cached entries saved locally, bridge failed");
     }
   }
 

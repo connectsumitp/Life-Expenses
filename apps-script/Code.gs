@@ -6,7 +6,7 @@ var SHEETS = {
   budgets: "Budgets",
   categories: "Categories",
   recurring: "Recurring",
-  transactions: "Transactions",
+  transactions: "Transactions"
 };
 
 var HEADERS = {
@@ -34,8 +34,8 @@ var HEADERS = {
     "source",
     "type",
     "note",
-    "userId",
-  ],
+    "userId"
+  ]
 };
 
 function doGet(e) {
@@ -86,11 +86,11 @@ function handleGet_(e) {
     assets: assets,
     cells: {
       C16: assets.mutualFunds,
-      C17: assets.stocks,
+      C17: assets.stocks
     },
     totalBurn: buildMetrics_(transactions).totalBurn,
     savingsRate: buildMetrics_(transactions).savingsRate,
-    unplanned: buildMetrics_(transactions).unplanned,
+    unplanned: buildMetrics_(transactions).unplanned
   });
 }
 
@@ -128,7 +128,7 @@ function handlePost_(e) {
     var direction = action === "addIncome" ? "income" : "expense";
     var row = normalizeTransaction_(payload, direction);
     row.userId = userId;
-    appendObject_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), HEADERS.transactions, row);
+    upsertUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), row, userId);
     if (Array.isArray(payload.accounts)) {
       var nextAccounts = normalizeAccounts_(payload.accounts);
       writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, nextAccounts, userId);
@@ -153,7 +153,7 @@ function handlePost_(e) {
     writeUserObjects_(ensureSheet_(ss, SHEETS.assets, HEADERS.assets), HEADERS.assets, [{
       mutualFunds: mf,
       stocks: stocks,
-      updatedAt: isoString_(new Date()),
+      updatedAt: isoString_(new Date())
     }], userId);
     return json_({ ok: true, action: action, assets: { mutualFunds: mf, stocks: stocks } });
   }
@@ -239,24 +239,39 @@ function ensureSheet_(ss, name, headers) {
 }
 
 function readObjects_(sheet) {
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
+  if (!sheet) {
+    return [];
+  }
+
+  var lastRow = sheet.getLastRow();
+  var lastColumn = sheet.getLastColumn();
+  if (lastRow < 2 || lastColumn < 1) {
+    return [];
+  }
+
+  var values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
   var headers = values[0];
   var rows = [];
 
   for (var r = 1; r < values.length; r += 1) {
+    var currentRow = values[r] || [];
     var hasValue = false;
-    for (var c = 0; c < values[r].length; c += 1) {
-      if (values[r][c] !== "") {
+    for (var c = 0; c < currentRow.length; c += 1) {
+      if (currentRow[c] !== "" && currentRow[c] !== null) {
         hasValue = true;
         break;
       }
     }
-    if (!hasValue) continue;
+    if (!hasValue) {
+      continue;
+    }
 
     var row = {};
     for (var h = 0; h < headers.length; h += 1) {
-      row[headers[h]] = values[r][h];
+      if (!headers[h]) {
+        continue;
+      }
+      row[headers[h]] = currentRow[h];
     }
     rows.push(row);
   }
@@ -317,6 +332,29 @@ function writeUserObjects_(sheet, headers, rows, userId) {
   writeObjects_(sheet, headers, retained.concat(withUserId_(rows || [], target)));
 }
 
+function upsertUserTransaction_(sheet, transaction, userId) {
+  var target = normalizeUserId_(userId);
+  var transactionId = String(transaction.id || "").trim();
+  if (!transactionId) {
+    appendObject_(sheet, HEADERS.transactions, transaction);
+    return false;
+  }
+
+  var rows = readObjects_(sheet);
+  var updated = false;
+  for (var i = 0; i < rows.length; i += 1) {
+    if (String(rows[i].id || "") === transactionId && normalizeUserId_(rows[i].userId) === target) {
+      rows[i] = transaction;
+      updated = true;
+      break;
+    }
+  }
+
+  if (!updated) rows.push(transaction);
+  writeObjects_(sheet, HEADERS.transactions, rows);
+  return updated;
+}
+
 function deleteUserTransaction_(sheet, transactionId, userId) {
   if (!transactionId) return false;
   var target = normalizeUserId_(userId);
@@ -357,7 +395,7 @@ function normalizeCategories_(categories, bucketMap) {
     var bucket = typeof raw === "string" ? bucketMap[name] : raw.bucket || bucketMap[name];
     output.push({
       name: name === "Food Outside" ? "Life Enjoyment" : name,
-      bucket: bucket || inferBucket_(name),
+      bucket: bucket || inferBucket_(name)
     });
   }
 
@@ -376,7 +414,7 @@ function normalizeAccounts_(accounts) {
       name: name,
       type: account.type || "Other",
       balance: Number(account.balance || account.value || 0),
-      updatedAt: account.updatedAt || isoString_(new Date()),
+      updatedAt: account.updatedAt || isoString_(new Date())
     });
   }
 
@@ -388,19 +426,19 @@ function readUserAssets_(sheet, userId, mainSheet) {
   if (rows.length) {
     return {
       mutualFunds: Number(rows[0].mutualFunds || 0),
-      stocks: Number(rows[0].stocks || 0),
+      stocks: Number(rows[0].stocks || 0)
     };
   }
   return {
     mutualFunds: Number(mainSheet.getRange("C16").getValue() || 0),
-    stocks: Number(mainSheet.getRange("C17").getValue() || 0),
+    stocks: Number(mainSheet.getRange("C17").getValue() || 0)
   };
 }
 
 function normalizeBudgets_(budgets) {
   var output = {
     monthlyTotal: Number((budgets && budgets.monthlyTotal) || 0),
-    categories: {},
+    categories: {}
   };
   var categories = (budgets && budgets.categories) || {};
   for (var name in categories) {
@@ -414,7 +452,7 @@ function normalizeBudgets_(budgets) {
 function readBudgets_(rows) {
   var output = {
     monthlyTotal: 0,
-    categories: {},
+    categories: {}
   };
   for (var i = 0; i < rows.length; i += 1) {
     var row = rows[i] || {};
@@ -450,7 +488,7 @@ function normalizeRecurring_(rules) {
       category: rule.category || "",
       amount: Number(rule.amount || 0),
       frequency: rule.frequency === "weekly" ? "weekly" : "monthly",
-      dueDay: Number(rule.dueDay || 1),
+      dueDay: Number(rule.dueDay || 1)
     });
   }
   return output;
@@ -475,7 +513,7 @@ function normalizeReturnedTransaction_(transaction) {
     account: transaction.account || "",
     source: transaction.source || "",
     type: transaction.type || "",
-    note: transaction.note || "",
+    note: transaction.note || ""
   };
 }
 
@@ -500,7 +538,7 @@ function normalizeTransaction_(payload, direction) {
     account: payload.account || "",
     source: payload.source || payload.category || "",
     type: payload.type || payload.bucket || "",
-    note: payload.note || "",
+    note: payload.note || ""
   };
 }
 
@@ -559,7 +597,7 @@ function buildMetrics_(transactions) {
   return {
     totalBurn: totalBurn,
     savingsRate: total ? Math.round((savings / total) * 100) : 0,
-    unplanned: Math.max(0, wants - total * 0.3),
+    unplanned: Math.max(0, wants - total * 0.3)
   };
 }
 
@@ -575,6 +613,6 @@ function errorJson_(error) {
   return json_({
     ok: false,
     error: String(error && error.message ? error.message : error),
-    stack: String(error && error.stack ? error.stack : ""),
+    stack: String(error && error.stack ? error.stack : "")
   });
 }

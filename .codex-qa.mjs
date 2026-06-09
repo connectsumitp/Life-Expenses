@@ -662,6 +662,7 @@ async function runInteractionTests(cdp) {
 
   await navigateForDevice(cdp, { ...devices[0], name: "desktop-refresh-after-expense" });
   await waitForPageReady(cdp);
+  await wait(700);
   const refreshState = await evalInPage(cdp, `
     (() => {
       const body = document.body.innerText;
@@ -669,13 +670,14 @@ async function runInteractionTests(cdp) {
       return {
         bodyHasNote: body.includes("UAT expense note"),
         bodyHasAmount: body.includes("-₹321"),
+        replayedToBridge: window.__uatPosts.some((post) => post.action === "addExpense" && post.id && post.note === "UAT expense note"),
         storedHasNote: stored.some((transaction) => transaction.note === "UAT expense note"),
         storedCount: stored.length,
         recentTop: document.querySelector(".recent-list .transaction-row")?.innerText || "",
       };
     })()
   `);
-  record("expense log survives refresh via scoped local cache", refreshState.bodyHasNote && refreshState.bodyHasAmount && refreshState.storedHasNote, JSON.stringify(refreshState));
+  record("expense log survives refresh and replays cached row to bridge", refreshState.bodyHasNote && refreshState.bodyHasAmount && refreshState.storedHasNote && refreshState.replayedToBridge, JSON.stringify(refreshState));
 
   await evalInPage(cdp, `document.querySelector(".entry-tab[aria-selected='false']").click()`);
   await wait(250);
