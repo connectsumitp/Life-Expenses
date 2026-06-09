@@ -40,6 +40,9 @@ const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || DEFAULT_APPS_SC
 const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
 const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
 const CONFIGURED_WORKSPACE_USER_ID = (import.meta.env.VITE_WORKSPACE_USER_ID || "").trim();
+const PRIMARY_WORKSPACE_EMAIL = "connect.sumitp@gmail.com";
+const PRIMARY_WORKSPACE_KEY = "123";
+const PRIMARY_WORKSPACE_USER_ID = "user-8eku3i";
 
 const DEFAULT_CATEGORIES = [
   "Daily Essentials",
@@ -198,6 +201,15 @@ function getConfiguredWorkspaceProfile() {
   return CONFIGURED_WORKSPACE_USER_ID ? { ...profile, userId: CONFIGURED_WORKSPACE_USER_ID } : profile;
 }
 
+function getPrimaryWorkspaceProfile() {
+  return normalizeUserProfile({
+    email: PRIMARY_WORKSPACE_EMAIL,
+    privateKey: PRIMARY_WORKSPACE_KEY,
+    label: "connect",
+    userId: PRIMARY_WORKSPACE_USER_ID,
+  });
+}
+
 function profilesMatch(profile, ownerProfile) {
   return Boolean(profile?.identity && ownerProfile?.identity && profile.identity === ownerProfile.identity);
 }
@@ -346,13 +358,15 @@ function writeStoredTransactions(userId, transactions) {
 function getInitialUserProfile() {
   const storedProfile = normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null));
   if (!storedProfile) return null;
+  const primaryProfile = getPrimaryWorkspaceProfile();
+  if (profilesMatch(storedProfile, primaryProfile)) return primaryProfile;
   const configuredProfile = getConfiguredWorkspaceProfile();
   if (configuredProfile) return profilesMatch(storedProfile, configuredProfile) ? storedProfile : null;
   return storedProfile;
 }
 
-function getLocalOwnerProfile() {
-  return normalizeUserProfile(readStoredValue(STORAGE_KEYS.ownerProfile, null)) || normalizeUserProfile(readStoredValue(STORAGE_KEYS.userProfile, null));
+function useBridgeSource() {
+  return Boolean(APPS_SCRIPT_URL);
 }
 
 function numericInputValue(value) {
@@ -560,15 +574,17 @@ function App() {
   const [mobilePage, setMobilePage] = useState("log");
   const [mobileJournalOpen, setMobileJournalOpen] = useState(false);
   const [note, setNote] = useState("");
-  const [expenseCategories, setExpenseCategories] = useState(() => readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), DEFAULT_CATEGORIES));
+  const [expenseCategories, setExpenseCategories] = useState(() => (useBridgeSource() ? DEFAULT_CATEGORIES : readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, activeUserId), DEFAULT_CATEGORIES)));
   const [categoryBuckets, setCategoryBuckets] = useState(() =>
-    readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, activeUserId), Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))),
+    useBridgeSource()
+      ? Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))
+      : readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, activeUserId), Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)]))),
   );
   const [incomeSources, setIncomeSources] = useState(DEFAULT_INCOME_SOURCES);
   const [category, setCategory] = useState("");
   const [incomeSource, setIncomeSource] = useState(DEFAULT_INCOME_SOURCES[0]);
   const [selectedAccount, setSelectedAccount] = useState(DEFAULT_ACCOUNTS[0].id);
-  const [accounts, setAccounts] = useState(() => normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
+  const [accounts, setAccounts] = useState(() => normalizeAccounts(useBridgeSource() ? DEFAULT_ACCOUNTS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
   const [assetName, setAssetName] = useState("");
   const [assetType, setAssetType] = useState("Bank");
   const [detailTab, setDetailTab] = useState("accounts");
@@ -582,15 +598,16 @@ function App() {
   const [journalNoteMode, setJournalNoteMode] = useState("all");
   const [transactions, setTransactions] = useState(() => {
     if (!activeUserId) return DEMO_TRANSACTIONS;
+    if (useBridgeSource()) return [];
     return readStoredTransactions(activeUserId);
   });
   const [assets, setAssets] = useState({ mutualFunds: 126000, stocks: 72500 });
-  const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), DEFAULT_ALLOCATION_TARGETS)));
-  const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), DEFAULT_BUDGETS)));
-  const [budgetSetupComplete, setBudgetSetupComplete] = useState(() => readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false));
-  const [budgetSetupOpen, setBudgetSetupOpen] = useState(() => !readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false));
+  const [allocationTargets, setAllocationTargets] = useState(() => normalizeAllocationTargets(useBridgeSource() ? DEFAULT_ALLOCATION_TARGETS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, activeUserId), DEFAULT_ALLOCATION_TARGETS)));
+  const [budgets, setBudgets] = useState(() => normalizeBudgets(expenseCategories, useBridgeSource() ? DEFAULT_BUDGETS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, activeUserId), DEFAULT_BUDGETS)));
+  const [budgetSetupComplete, setBudgetSetupComplete] = useState(() => (useBridgeSource() ? false : readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false)));
+  const [budgetSetupOpen, setBudgetSetupOpen] = useState(() => (useBridgeSource() ? true : !readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, activeUserId), false)));
   const [recurringRules, setRecurringRules] = useState(() =>
-    normalizeRecurringRules(readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, activeUserId), DEFAULT_RECURRING_RULES), expenseCategories),
+    normalizeRecurringRules(useBridgeSource() ? DEFAULT_RECURRING_RULES : readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, activeUserId), DEFAULT_RECURRING_RULES), expenseCategories),
   );
   const [recurringSetupOpen, setRecurringSetupOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
@@ -616,20 +633,18 @@ function App() {
       try {
         const data = await apiGetDashboard(activeUserId);
         if (!alive || !data) return;
-        if (Array.isArray(data.transactions)) {
-          const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-          setTransactions(remoteTransactions);
-          writeStoredTransactions(activeUserId, remoteTransactions);
-        }
-        if (Array.isArray(data.categories) && data.categories.length) {
-          const nextCategories = normalizeCategories(data.categories);
-          setExpenseCategories(nextCategories);
-          setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
-        }
-        if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
-        if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
-        if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
-        if (Array.isArray(data.accounts)) setAccounts(normalizeAccounts(data.accounts));
+        const nextCategories = Array.isArray(data.categories) && data.categories.length ? normalizeCategories(data.categories) : DEFAULT_CATEGORIES;
+        const remoteTransactions = Array.isArray(data.transactions) ? normalizeDashboardTransactions(data.transactions) : [];
+        setTransactions(remoteTransactions);
+        writeStoredTransactions(activeUserId, remoteTransactions);
+        setExpenseCategories(nextCategories);
+        setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
+        setBudgets(normalizeBudgets(nextCategories, data.budgets || DEFAULT_BUDGETS));
+        setBudgetSetupComplete(Boolean(data.budgets));
+        setBudgetSetupOpen(!data.budgets);
+        setAllocationTargets(normalizeAllocationTargets(data.allocationTargets || DEFAULT_ALLOCATION_TARGETS));
+        setRecurringRules(normalizeRecurringRules(Array.isArray(data.recurringRules) ? data.recurringRules : DEFAULT_RECURRING_RULES, nextCategories));
+        setAccounts(normalizeAccounts(Array.isArray(data.accounts) && data.accounts.length ? data.accounts : DEFAULT_ACCOUNTS));
         if (data.assets) setAssets(normalizeAssets(data.assets));
         if (data.cells) {
           setAssets({
@@ -657,17 +672,30 @@ function App() {
 
   useEffect(() => {
     if (!userProfile) return;
-    const nextCategories = readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, userProfile.userId), DEFAULT_CATEGORIES);
     writeStoredValue(STORAGE_KEYS.userProfile, userProfile);
-    setTransactions(readStoredTransactions(userProfile.userId));
-    setExpenseCategories(nextCategories);
-    setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
-    setAccounts(normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, userProfile.userId), DEFAULT_ACCOUNTS)));
-    setBudgets(normalizeBudgets(nextCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, userProfile.userId), DEFAULT_BUDGETS)));
-    setBudgetSetupComplete(readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
-    setBudgetSetupOpen(!readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
-    setAllocationTargets(normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, userProfile.userId), DEFAULT_ALLOCATION_TARGETS)));
-    setRecurringRules(normalizeRecurringRules(readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, userProfile.userId), DEFAULT_RECURRING_RULES), nextCategories));
+    if (useBridgeSource()) {
+      setHydrating(true);
+      setTransactions([]);
+      setExpenseCategories(DEFAULT_CATEGORIES);
+      setCategoryBuckets(Object.fromEntries(DEFAULT_CATEGORIES.map((item) => [item, getBucket(item)])));
+      setAccounts(normalizeAccounts(DEFAULT_ACCOUNTS));
+      setBudgets(normalizeBudgets(DEFAULT_CATEGORIES, DEFAULT_BUDGETS));
+      setBudgetSetupComplete(false);
+      setBudgetSetupOpen(true);
+      setAllocationTargets(normalizeAllocationTargets(DEFAULT_ALLOCATION_TARGETS));
+      setRecurringRules(normalizeRecurringRules(DEFAULT_RECURRING_RULES, DEFAULT_CATEGORIES));
+    } else {
+      const nextCategories = readStoredValue(getScopedStorageKey(STORAGE_KEYS.expenseCategories, userProfile.userId), DEFAULT_CATEGORIES);
+      setTransactions(readStoredTransactions(userProfile.userId));
+      setExpenseCategories(nextCategories);
+      setCategoryBuckets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.categoryBuckets, userProfile.userId), Object.fromEntries(nextCategories.map((item) => [item, getBucket(item)]))));
+      setAccounts(normalizeAccounts(readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, userProfile.userId), DEFAULT_ACCOUNTS)));
+      setBudgets(normalizeBudgets(nextCategories, readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgets, userProfile.userId), DEFAULT_BUDGETS)));
+      setBudgetSetupComplete(readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
+      setBudgetSetupOpen(!readStoredValue(getScopedStorageKey(STORAGE_KEYS.budgetSetupComplete, userProfile.userId), false));
+      setAllocationTargets(normalizeAllocationTargets(readStoredValue(getScopedStorageKey(STORAGE_KEYS.allocationTargets, userProfile.userId), DEFAULT_ALLOCATION_TARGETS)));
+      setRecurringRules(normalizeRecurringRules(readStoredValue(getScopedStorageKey(STORAGE_KEYS.recurringRules, userProfile.userId), DEFAULT_RECURRING_RULES), nextCategories));
+    }
     setCategory("");
     setSelectedAccount(DEFAULT_ACCOUNTS[0].id);
   }, [userProfile?.userId]);
@@ -760,20 +788,18 @@ function App() {
 
   function applyDashboardData(data) {
     if (!data) return;
-    if (Array.isArray(data.transactions)) {
-      const remoteTransactions = normalizeDashboardTransactions(data.transactions);
-      setTransactions(remoteTransactions);
-      if (activeUserId) writeStoredTransactions(activeUserId, remoteTransactions);
-    }
-    if (Array.isArray(data.categories) && data.categories.length) {
-      const nextCategories = normalizeCategories(data.categories);
-      setExpenseCategories(nextCategories);
-      setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
-    }
-    if (data.budgets) setBudgets((current) => normalizeBudgets(expenseCategories, data.budgets || current));
-    if (data.allocationTargets) setAllocationTargets(normalizeAllocationTargets(data.allocationTargets));
-    if (Array.isArray(data.recurringRules)) setRecurringRules(normalizeRecurringRules(data.recurringRules, expenseCategories));
-    if (Array.isArray(data.accounts)) setAccounts(normalizeAccounts(data.accounts));
+    const nextCategories = Array.isArray(data.categories) && data.categories.length ? normalizeCategories(data.categories) : DEFAULT_CATEGORIES;
+    const remoteTransactions = Array.isArray(data.transactions) ? normalizeDashboardTransactions(data.transactions) : [];
+    setTransactions(remoteTransactions);
+    if (activeUserId) writeStoredTransactions(activeUserId, remoteTransactions);
+    setExpenseCategories(nextCategories);
+    setCategoryBuckets(normalizeCategoryBuckets(nextCategories, data.categoryBuckets));
+    setBudgets(normalizeBudgets(nextCategories, data.budgets || DEFAULT_BUDGETS));
+    setBudgetSetupComplete(Boolean(data.budgets));
+    setBudgetSetupOpen(!data.budgets);
+    setAllocationTargets(normalizeAllocationTargets(data.allocationTargets || DEFAULT_ALLOCATION_TARGETS));
+    setRecurringRules(normalizeRecurringRules(Array.isArray(data.recurringRules) ? data.recurringRules : DEFAULT_RECURRING_RULES, nextCategories));
+    setAccounts(normalizeAccounts(Array.isArray(data.accounts) && data.accounts.length ? data.accounts : DEFAULT_ACCOUNTS));
     if (data.assets) setAssets(normalizeAssets(data.assets));
     if (data.cells) {
       setAssets({
@@ -984,11 +1010,13 @@ function App() {
       return;
     }
     const configuredProfile = getConfiguredWorkspaceProfile();
-    if (configuredProfile && !profilesMatch(profile, configuredProfile)) {
+    const primaryProfile = getPrimaryWorkspaceProfile();
+    const isPrimaryWorkspace = profilesMatch(profile, primaryProfile);
+    if (configuredProfile && !isPrimaryWorkspace && !profilesMatch(profile, configuredProfile)) {
       setStatus("Email or private key does not match");
       return;
     }
-    const activeProfile = configuredProfile ? { ...configuredProfile, label: profile.label } : profile;
+    const activeProfile = isPrimaryWorkspace ? { ...primaryProfile, label: profile.label } : configuredProfile ? { ...configuredProfile, label: profile.label } : profile;
     setUserProfile(activeProfile);
     setUserEmailDraft(activeProfile.email);
     setUserKeyDraft(activeProfile.privateKey);
@@ -2826,7 +2854,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const chartIncome = chartIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const chartAllocationBase = chartIncome || chartTotal;
   const allocationBase = metricIncome || total;
-  const computedTotalBurn = totals.needs + totals.wants;
+  const computedTotalBurn = total;
   const computedSavingsRate = chartAllocationBase ? Math.round((chartTotals.savings / chartAllocationBase) * 100) : 0;
   const computedUnplanned = Math.max(0, chartTotals.wants - chartAllocationBase * ((allocationTargets.wants || DEFAULT_ALLOCATION_TARGETS.wants) / 100));
   const totalBurn = computedTotalBurn;
@@ -2891,9 +2919,9 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, accounts, period, now);
   const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
-  const monthlyBudgetSpent = computedTotalBurn;
+  const monthlyBudgetSpent = categoryProgress.reduce((sum, item) => sum + item.spent, 0);
   const overspend = Math.max(0, monthlyBudgetSpent - Number(budgets.monthlyTotal || 0));
-  const budgetRemaining = Math.max(0, metricBudgetTarget - computedTotalBurn);
+  const budgetRemaining = Math.max(0, metricBudgetTarget - monthlyBudgetSpent);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const projectedBurn = now.getDate() ? Math.round((monthlyBudgetSpent / now.getDate()) * daysInMonth) : monthlyBudgetSpent;
   const forecast = {
@@ -3099,8 +3127,7 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
           (transaction) =>
             Number(transaction.year || 0) === currentYear &&
             Number(transaction.monthNumber || 0) === currentMonth &&
-            Number(transaction.weekOfMonth || 1) === week &&
-            transaction.bucket !== "Savings",
+            Number(transaction.weekOfMonth || 1) === week,
         )
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }));
@@ -3110,7 +3137,7 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
     return [currentYear - 2, currentYear - 1, currentYear].map((year) => ({
       label: String(year),
       burn: expenseTransactions
-        .filter((transaction) => Number(transaction.year || 0) === year && transaction.bucket !== "Savings")
+        .filter((transaction) => Number(transaction.year || 0) === year)
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }));
   }
@@ -3122,8 +3149,7 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
         (transaction) =>
           Number(transaction.year || 0) === currentYear &&
           Number(transaction.monthNumber || 0) === currentMonth &&
-          Number(transaction.weekOfMonth || 1) === week &&
-          transaction.bucket !== "Savings",
+          Number(transaction.weekOfMonth || 1) === week,
       )
       .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
   }));
