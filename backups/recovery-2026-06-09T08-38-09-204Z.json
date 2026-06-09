@@ -1,0 +1,1565 @@
+{
+  "capturedAt": "2026-06-09T08:37:50.314Z",
+  "endpoints": {
+    "current": {
+      "default-user": {
+        "ok": true,
+        "transactions": [
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants",
+            "note": ""
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings",
+            "note": ""
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings",
+            "note": ""
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          }
+        ],
+        "accounts": [
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          }
+        ],
+        "categories": [
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          }
+        ],
+        "categoryBuckets": {
+          "Daily Essentials": "Needs",
+          "Life Enjoyment": "Wants",
+          "Commuting": "Needs",
+          "Home & Utilities": "Needs",
+          "Health & Fitness": "Needs",
+          "Personal Care": "Wants",
+          "Subscriptions": "Wants",
+          "Investments": "Savings",
+          "Emergency": "Savings"
+        },
+        "budgets": null,
+        "recurringRules": [],
+        "assets": {
+          "mutualFunds": 0,
+          "stocks": 0
+        },
+        "cells": {
+          "C16": 0,
+          "C17": 0
+        },
+        "totalBurn": 770,
+        "savingsRate": 98,
+        "unplanned": 0
+      },
+      "user-8eku3i": {
+        "ok": true,
+        "transactions": [
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants",
+            "note": ""
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings",
+            "note": ""
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings",
+            "note": ""
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs",
+            "note": ""
+          }
+        ],
+        "accounts": [
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          }
+        ],
+        "categories": [
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          }
+        ],
+        "categoryBuckets": {
+          "Daily Essentials": "Needs",
+          "Life Enjoyment": "Wants",
+          "Commuting": "Needs",
+          "Home & Utilities": "Needs",
+          "Health & Fitness": "Needs",
+          "Personal Care": "Wants",
+          "Subscriptions": "Wants",
+          "Investments": "Savings",
+          "Emergency": "Savings"
+        },
+        "budgets": null,
+        "recurringRules": [],
+        "assets": {
+          "mutualFunds": 0,
+          "stocks": 0
+        },
+        "cells": {
+          "C16": 0,
+          "C17": 0
+        },
+        "totalBurn": 770,
+        "savingsRate": 98,
+        "unplanned": 0
+      }
+    },
+    "previous": {
+      "default-user": {
+        "ok": true,
+        "transactions": [
+          {
+            "id": "1780397325128-ba47299cd5679",
+            "timestamp": "2026-06-02T10:48:45.128Z",
+            "date": "2026-06-01T18:30:00.000Z",
+            "dayString": "Tue",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 45000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780742951797-8bdd180bfdec5",
+            "timestamp": "2026-06-06T10:49:11.797Z",
+            "date": "2026-06-05T18:30:00.000Z",
+            "dayString": "Sat",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 290,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780310870337-30acdf0b88c91",
+            "timestamp": "2026-06-01T10:47:50.337Z",
+            "date": "2026-05-31T18:30:00.000Z",
+            "dayString": "Mon",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Subscriptions",
+            "bucket": "Wants",
+            "amount": 1999,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Subscriptions",
+            "type": "Wants"
+          },
+          {
+            "id": "1780915584078-f2241e659d2c6",
+            "timestamp": "2026-06-08T10:46:24.078Z",
+            "date": "2026-06-07T18:30:00.000Z",
+            "dayString": "Mon",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 24,
+            "weekOfMonth": 2,
+            "direction": "expense",
+            "category": "Health & Fitness",
+            "bucket": "Needs",
+            "amount": 1902,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Health & Fitness",
+            "type": "Needs"
+          },
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          }
+        ],
+        "accounts": [
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 187090,
+            "updatedAt": "2026-06-08T11:19:37.742Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 23364,
+            "updatedAt": "2026-06-08T11:20:02.612Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 1800,
+            "updatedAt": "2026-06-08T11:20:05.901Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-09T08:25:10.939Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-09T08:25:10.939Z"
+          },
+          {
+            "id": "midas",
+            "name": "MIDAS",
+            "type": "Bank",
+            "balance": 74996,
+            "updatedAt": "2026-06-08T11:21:09.653Z"
+          },
+          {
+            "id": "post-office",
+            "name": "RD",
+            "type": "Bank",
+            "balance": 900000,
+            "updatedAt": "2026-06-08T11:27:42.908Z"
+          },
+          {
+            "id": "ppf",
+            "name": "PPF",
+            "type": "Bank",
+            "balance": 580000,
+            "updatedAt": "2026-06-08T11:27:00.396Z"
+          },
+          {
+            "id": "fd",
+            "name": "FD",
+            "type": "Bank",
+            "balance": 150000,
+            "updatedAt": "2026-06-08T11:28:01.120Z"
+          },
+          {
+            "id": "lic",
+            "name": "LIC",
+            "type": "Bank",
+            "balance": 100000,
+            "updatedAt": "2026-06-08T11:28:18.285Z"
+          },
+          {
+            "id": "post-office-2",
+            "name": "Post Office",
+            "type": "Bank",
+            "balance": 700000,
+            "updatedAt": "2026-06-08T11:28:52.230Z"
+          }
+        ],
+        "categories": [
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          }
+        ],
+        "categoryBuckets": {
+          "Daily Essentials": "Needs",
+          "Life Enjoyment": "Wants",
+          "Commuting": "Needs",
+          "Home & Utilities": "Needs",
+          "Health & Fitness": "Needs",
+          "Personal Care": "Wants",
+          "Subscriptions": "Wants",
+          "Investments": "Savings",
+          "Emergency": "Savings"
+        },
+        "assets": {
+          "mutualFunds": 0,
+          "stocks": 0
+        },
+        "cells": {
+          "C16": 0,
+          "C17": 0
+        },
+        "totalBurn": 5731,
+        "savingsRate": 95,
+        "unplanned": 0
+      },
+      "user-8eku3i": {
+        "ok": true,
+        "transactions": [
+          {
+            "id": "1780397325128-ba47299cd5679",
+            "timestamp": "2026-06-02T10:48:45.128Z",
+            "date": "2026-06-01T18:30:00.000Z",
+            "dayString": "Tue",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 45000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780742951797-8bdd180bfdec5",
+            "timestamp": "2026-06-06T10:49:11.797Z",
+            "date": "2026-06-05T18:30:00.000Z",
+            "dayString": "Sat",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 290,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780310870337-30acdf0b88c91",
+            "timestamp": "2026-06-01T10:47:50.337Z",
+            "date": "2026-05-31T18:30:00.000Z",
+            "dayString": "Mon",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Subscriptions",
+            "bucket": "Wants",
+            "amount": 1999,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Subscriptions",
+            "type": "Wants"
+          },
+          {
+            "id": "1780915584078-f2241e659d2c6",
+            "timestamp": "2026-06-08T10:46:24.078Z",
+            "date": "2026-06-07T18:30:00.000Z",
+            "dayString": "Mon",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 24,
+            "weekOfMonth": 2,
+            "direction": "expense",
+            "category": "Health & Fitness",
+            "bucket": "Needs",
+            "amount": 1902,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Health & Fitness",
+            "type": "Needs"
+          },
+          {
+            "id": "1780578834475-bf9c2da1ca8628",
+            "timestamp": "2026-06-04T13:13:54.475Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Life Enjoyment",
+            "bucket": "Wants",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Life Enjoyment",
+            "type": "Wants"
+          },
+          {
+            "id": "1780578802714-4630d10762198",
+            "timestamp": "2026-06-04T13:13:22.714Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 560,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780556346104-91b3742bb5351",
+            "timestamp": "2026-06-04T06:59:06.104Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Emergency",
+            "bucket": "Savings",
+            "amount": 6000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Emergency",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556319974-126940b1b758c8",
+            "timestamp": "2026-06-04T06:58:39.974Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Investments",
+            "bucket": "Savings",
+            "amount": 25000,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Investments",
+            "type": "Savings"
+          },
+          {
+            "id": "1780556279430-8eab14d8a5ae4",
+            "timestamp": "2026-06-04T06:57:59.430Z",
+            "date": "2026-06-03T18:30:00.000Z",
+            "dayString": "Thu",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 110,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          },
+          {
+            "id": "1780492893249-f81a5bc96c4b78",
+            "timestamp": "2026-06-03T13:21:33.249Z",
+            "date": "2026-06-02T18:30:00.000Z",
+            "dayString": "Wed",
+            "monthString": "2026-05-31T18:30:00.000Z",
+            "monthNumber": 6,
+            "year": 2026,
+            "weekNumber": 23,
+            "weekOfMonth": 1,
+            "direction": "expense",
+            "category": "Daily Essentials",
+            "bucket": "Needs",
+            "amount": 50,
+            "accountId": "sbi",
+            "account": "SBI Account",
+            "source": "Daily Essentials",
+            "type": "Needs"
+          }
+        ],
+        "accounts": [
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 10230,
+            "updatedAt": "2026-06-04T13:13:54.476Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 28500,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 6800,
+            "updatedAt": "2026-06-03T13:21:34.344Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-04T07:00:30.496Z"
+          },
+          {
+            "id": "sbi",
+            "name": "SBI Account",
+            "type": "Bank",
+            "balance": 187090,
+            "updatedAt": "2026-06-08T11:19:37.742Z"
+          },
+          {
+            "id": "hdfc",
+            "name": "HDFC Account",
+            "type": "Bank",
+            "balance": 23364,
+            "updatedAt": "2026-06-08T11:20:02.612Z"
+          },
+          {
+            "id": "cash",
+            "name": "Cash Reserve",
+            "type": "Cash",
+            "balance": 1800,
+            "updatedAt": "2026-06-08T11:20:05.901Z"
+          },
+          {
+            "id": "stocks",
+            "name": "Stocks",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-09T08:25:10.939Z"
+          },
+          {
+            "id": "mutualFunds",
+            "name": "Mutual Funds",
+            "type": "Market",
+            "balance": 0,
+            "updatedAt": "2026-06-09T08:25:10.939Z"
+          },
+          {
+            "id": "midas",
+            "name": "MIDAS",
+            "type": "Bank",
+            "balance": 74996,
+            "updatedAt": "2026-06-08T11:21:09.653Z"
+          },
+          {
+            "id": "post-office",
+            "name": "RD",
+            "type": "Bank",
+            "balance": 900000,
+            "updatedAt": "2026-06-08T11:27:42.908Z"
+          },
+          {
+            "id": "ppf",
+            "name": "PPF",
+            "type": "Bank",
+            "balance": 580000,
+            "updatedAt": "2026-06-08T11:27:00.396Z"
+          },
+          {
+            "id": "fd",
+            "name": "FD",
+            "type": "Bank",
+            "balance": 150000,
+            "updatedAt": "2026-06-08T11:28:01.120Z"
+          },
+          {
+            "id": "lic",
+            "name": "LIC",
+            "type": "Bank",
+            "balance": 100000,
+            "updatedAt": "2026-06-08T11:28:18.285Z"
+          },
+          {
+            "id": "post-office-2",
+            "name": "Post Office",
+            "type": "Bank",
+            "balance": 700000,
+            "updatedAt": "2026-06-08T11:28:52.230Z"
+          }
+        ],
+        "categories": [
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Daily Essentials",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Life Enjoyment",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Commuting",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Home & Utilities",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Health & Fitness",
+            "bucket": "Needs"
+          },
+          {
+            "name": "Personal Care",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Subscriptions",
+            "bucket": "Wants"
+          },
+          {
+            "name": "Investments",
+            "bucket": "Savings"
+          },
+          {
+            "name": "Emergency",
+            "bucket": "Savings"
+          }
+        ],
+        "categoryBuckets": {
+          "Daily Essentials": "Needs",
+          "Life Enjoyment": "Wants",
+          "Commuting": "Needs",
+          "Home & Utilities": "Needs",
+          "Health & Fitness": "Needs",
+          "Personal Care": "Wants",
+          "Subscriptions": "Wants",
+          "Investments": "Savings",
+          "Emergency": "Savings"
+        },
+        "assets": {
+          "mutualFunds": 0,
+          "stocks": 0
+        },
+        "cells": {
+          "C16": 0,
+          "C17": 0
+        },
+        "totalBurn": 5731,
+        "savingsRate": 95,
+        "unplanned": 0
+      }
+    }
+  }
+}
