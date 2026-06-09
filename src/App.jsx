@@ -35,8 +35,13 @@ import {
   X,
 } from "lucide-react";
 
-const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec";
-const APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || DEFAULT_APPS_SCRIPT_URL).trim();
+const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec";
+const RETIRED_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec";
+const CONFIGURED_APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
+const APPS_SCRIPT_URL =
+  CONFIGURED_APPS_SCRIPT_URL && CONFIGURED_APPS_SCRIPT_URL !== RETIRED_APPS_SCRIPT_URL
+    ? CONFIGURED_APPS_SCRIPT_URL
+    : DEFAULT_APPS_SCRIPT_URL;
 const CONFIGURED_WORKSPACE_EMAIL = (import.meta.env.VITE_WORKSPACE_EMAIL || "").trim().toLowerCase();
 const CONFIGURED_WORKSPACE_KEY = (import.meta.env.VITE_WORKSPACE_KEY || "").trim();
 const CONFIGURED_WORKSPACE_USER_ID = (import.meta.env.VITE_WORKSPACE_USER_ID || "").trim();
@@ -408,9 +413,9 @@ function mergeTransactions(primaryTransactions = [], fallbackTransactions = []) 
 
 function normalizeCategories(categories) {
   if (!Array.isArray(categories)) return [];
-  return categories
+  return [...new Set(categories
     .map((category) => normalizeCategoryName(typeof category === "string" ? category : category.name))
-    .filter(Boolean);
+    .filter(Boolean))];
 }
 
 function normalizeCategoryBuckets(categories, buckets = {}) {
@@ -510,11 +515,36 @@ function normalizeRecurringRules(rules, categories) {
 }
 
 function normalizeDashboardTransactions(transactions) {
-  return (Array.isArray(transactions) ? transactions : []).map((transaction) => ({
-    ...transaction,
-    category: normalizeCategoryName(transaction.category),
-    bucket: transaction.direction === "income" ? "Income" : getBucket(transaction.category),
-  }));
+  const seen = new Set();
+  return (Array.isArray(transactions) ? transactions : [])
+    .map((transaction, index) => {
+      const category = normalizeCategoryName(transaction.category);
+      const stableId =
+        transaction.id ||
+        [
+          transaction.timestamp,
+          transaction.date,
+          transaction.direction,
+          category,
+          transaction.amount,
+          transaction.accountId,
+          transaction.note,
+          index,
+        ]
+          .filter((part) => part !== undefined && part !== null)
+          .join("|");
+      return {
+        ...transaction,
+        id: stableId,
+        category,
+        bucket: transaction.direction === "income" ? "Income" : getBucket(category),
+      };
+    })
+    .filter((transaction) => {
+      if (!transaction.id || seen.has(transaction.id)) return false;
+      seen.add(transaction.id);
+      return true;
+    });
 }
 
 function findLocalOnlyTransactions(remoteTransactions = [], localTransactions = []) {
@@ -2722,13 +2752,20 @@ function normalizeAssets(assets) {
 }
 
 function normalizeAccounts(accounts) {
-  return accounts.map((account, index) => ({
-    id: account.id || account.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `account-${index}`,
-    name: account.name || `Account ${index + 1}`,
-    type: account.type || "Other",
-    balance: Number(account.balance || account.value || 0),
-    updatedAt: account.updatedAt,
-  }));
+  const seen = new Set();
+  return accounts
+    .map((account, index) => ({
+      id: account.id || account.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `account-${index}`,
+      name: account.name || `Account ${index + 1}`,
+      type: account.type || "Other",
+      balance: Number(account.balance || account.value || 0),
+      updatedAt: account.updatedAt,
+    }))
+    .filter((account) => {
+      if (!account.id || seen.has(account.id)) return false;
+      seen.add(account.id);
+      return true;
+    });
 }
 
 function getAccountName(accounts, accountId) {

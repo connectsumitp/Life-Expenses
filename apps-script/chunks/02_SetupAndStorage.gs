@@ -2,6 +2,21 @@ function getWorkbook_() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
+function getBridgeInfo_(ss) {
+  var sheets = ss.getSheets().map(function(sheet) {
+    return {
+      name: sheet.getName(),
+      gid: sheet.getSheetId()
+    };
+  });
+  return {
+    spreadsheetId: SPREADSHEET_ID,
+    spreadsheetName: ss.getName(),
+    spreadsheetUrl: ss.getUrl(),
+    sheets: sheets
+  };
+}
+
 function parsePayload_(e) {
   if (!e || !e.postData || !e.postData.contents) return {};
   try {

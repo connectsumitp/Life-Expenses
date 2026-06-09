@@ -84,6 +84,7 @@ function handleGet_(e) {
     budgets: readBudgets_(filterByUser_(readObjects_(budgetsSheet), userId)),
     recurringRules: normalizeRecurring_(filterByUser_(readObjects_(recurringSheet), userId)),
     assets: assets,
+    bridge: getBridgeInfo_(ss),
     cells: {
       C16: assets.mutualFunds,
       C17: assets.stocks
