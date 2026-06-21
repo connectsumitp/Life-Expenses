@@ -34,7 +34,15 @@ var HEADERS = {
     "source",
     "type",
     "note",
-    "userId"
+    "userId",
+    "fromAccountId",
+    "fromAccount",
+    "toAccountId",
+    "toAccount",
+    "countsAsSavings",
+    "countsTowardBurn",
+    "burnEffect",
+    "burnAmount"
   ]
 };
 
@@ -108,9 +116,15 @@ function handlePost_(e) {
   }
 
   if (action === "saveAccounts") {
+    var accountLock = LockService.getScriptLock();
+    accountLock.waitLock(10000);
     var accounts = normalizeAccounts_(payload.accounts);
-    writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts, userId);
-    return json_({ ok: true, action: action, accounts: accounts });
+    try {
+      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts, userId);
+      return json_({ ok: true, action: action, accounts: accounts });
+    } finally {
+      accountLock.releaseLock();
+    }
   }
 
   if (action === "saveBudgets") {
@@ -125,26 +139,55 @@ function handlePost_(e) {
     return json_({ ok: true, action: action, recurringRules: recurringRules });
   }
 
-  if (action === "addExpense" || action === "addIncome") {
-    var direction = action === "addIncome" ? "income" : "expense";
+  if (action === "addExpense" || action === "addIncome" || action === "addTransfer") {
+    var transactionLock = LockService.getScriptLock();
+    transactionLock.waitLock(10000);
+    var direction = action === "addIncome" ? "income" : action === "addTransfer" ? "transfer" : "expense";
     var row = normalizeTransaction_(payload, direction);
     row.userId = userId;
-    upsertUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), row, userId);
-    if (Array.isArray(payload.accounts)) {
-      var nextAccounts = normalizeAccounts_(payload.accounts);
-      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, nextAccounts, userId);
+    try {
+      var transactionSheet = ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
+      var existingTransaction = getUserTransactionById_(transactionSheet, row.id, userId);
+      var nextAccounts;
+      if (existingTransaction) {
+        upsertUserTransaction_(transactionSheet, row, userId);
+        nextAccounts = normalizeAccounts_(filterByUser_(readObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts)), userId));
+      } else {
+        nextAccounts = mutateAccountsForTransaction_(ss, row, userId, 1);
+        try {
+          upsertUserTransaction_(transactionSheet, row, userId);
+        } catch (writeError) {
+          mutateAccountsForTransaction_(ss, row, userId, -1);
+          throw writeError;
+        }
+      }
+      return json_({ ok: true, action: action, transaction: row, accounts: nextAccounts });
+    } finally {
+      transactionLock.releaseLock();
     }
-    return json_({ ok: true, action: action, transaction: row });
   }
 
   if (action === "deleteTransaction") {
+    var deleteLock = LockService.getScriptLock();
+    deleteLock.waitLock(10000);
     var deletedId = String(payload.transactionId || payload.id || "").trim();
-    var deleted = deleteUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), deletedId, userId);
-    if (Array.isArray(payload.accounts)) {
-      var replacementAccounts = normalizeAccounts_(payload.accounts);
-      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, replacementAccounts, userId);
+    try {
+      var deleteSheet = ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
+      var deletedTransaction = getUserTransactionById_(deleteSheet, deletedId, userId);
+      var replacementAccounts = deletedTransaction
+        ? mutateAccountsForTransaction_(ss, deletedTransaction, userId, -1)
+        : normalizeAccounts_(filterByUser_(readObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts)), userId));
+      var deleted;
+      try {
+        deleted = deleteUserTransaction_(deleteSheet, deletedId, userId);
+      } catch (deleteError) {
+        if (deletedTransaction) mutateAccountsForTransaction_(ss, deletedTransaction, userId, 1);
+        throw deleteError;
+      }
+      return json_({ ok: true, action: action, deleted: deleted, transactionId: deletedId, accounts: replacementAccounts });
+    } finally {
+      deleteLock.releaseLock();
     }
-    return json_({ ok: true, action: action, deleted: deleted, transactionId: deletedId });
   }
 
   if (action === "updateGroww") {
@@ -590,7 +633,15 @@ function normalizeReturnedTransaction_(transaction) {
     account: transaction.account || "",
     source: transaction.source || "",
     type: transaction.type || "",
-    note: transaction.note || ""
+    note: transaction.note || "",
+    fromAccountId: transaction.fromAccountId || "",
+    fromAccount: transaction.fromAccount || "",
+    toAccountId: transaction.toAccountId || "",
+    toAccount: transaction.toAccount || "",
+    countsAsSavings: transaction.countsAsSavings === true || String(transaction.countsAsSavings).toLowerCase() === "true",
+    countsTowardBurn: transaction.countsTowardBurn === true || String(transaction.countsTowardBurn).toLowerCase() === "true",
+    burnEffect: Number(transaction.burnEffect || 0),
+    burnAmount: Number(transaction.burnAmount === "" || transaction.burnAmount === undefined ? transaction.amount || 0 : transaction.burnAmount)
   };
 }
 
@@ -615,8 +666,61 @@ function normalizeTransaction_(payload, direction) {
     account: payload.account || "",
     source: payload.source || payload.category || "",
     type: payload.type || payload.bucket || "",
-    note: payload.note || ""
+    note: payload.note || "",
+    fromAccountId: payload.fromAccountId || "",
+    fromAccount: payload.fromAccount || "",
+    toAccountId: payload.toAccountId || "",
+    toAccount: payload.toAccount || "",
+    countsAsSavings: payload.countsAsSavings === true || String(payload.countsAsSavings).toLowerCase() === "true",
+    countsTowardBurn: payload.countsTowardBurn === true || String(payload.countsTowardBurn).toLowerCase() === "true",
+    burnEffect: Number(payload.burnEffect || 0),
+    burnAmount: Number(payload.burnAmount === undefined ? payload.amount || 0 : payload.burnAmount)
   };
+}
+
+function getUserTransactionById_(sheet, transactionId, userId) {
+  var rows = filterByUser_(readObjects_(sheet), userId);
+  for (var i = 0; i < rows.length; i += 1) {
+    if (String(rows[i].id || "") === String(transactionId || "")) return rows[i];
+  }
+  return null;
+}
+
+function mutateAccountsForTransaction_(ss, transaction, userId, multiplier) {
+  var accountSheet = ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts);
+  var accounts = normalizeAccounts_(filterByUser_(readObjects_(accountSheet), userId));
+  var amount = Number(transaction.amount || 0) * Number(multiplier || 1);
+  var direction = transaction.direction || "expense";
+  var debitId = direction === "transfer" ? transaction.fromAccountId : direction === "expense" ? transaction.accountId : "";
+  var creditId = direction === "transfer" ? transaction.toAccountId : direction === "income" ? transaction.accountId : "";
+  var debitFound = !debitId;
+  var creditFound = !creditId;
+
+  for (var i = 0; i < accounts.length; i += 1) {
+    if (accounts[i].id === debitId) {
+      debitFound = true;
+      if (Number(multiplier || 1) > 0 && Number(accounts[i].balance || 0) < Math.abs(amount)) {
+        throw new Error("Insufficient balance in " + accounts[i].name);
+      }
+    }
+    if (accounts[i].id === creditId) creditFound = true;
+  }
+  if (!debitFound || !creditFound) throw new Error("Transaction account was not found");
+
+  var updatedAt = isoString_(new Date());
+  for (var j = 0; j < accounts.length; j += 1) {
+    if (accounts[j].id === debitId) {
+      accounts[j].balance = Number(accounts[j].balance || 0) - amount;
+      accounts[j].updatedAt = updatedAt;
+    }
+    if (accounts[j].id === creditId) {
+      accounts[j].balance = Number(accounts[j].balance || 0) + amount;
+      accounts[j].updatedAt = updatedAt;
+    }
+  }
+
+  writeUserObjects_(accountSheet, HEADERS.accounts, accounts, userId);
+  return accounts;
 }
 
 function upsertAccount_(ss, account, userId) {
@@ -654,26 +758,33 @@ function inferBucket_(name) {
 }
 
 function buildMetrics_(transactions) {
-  var totalBurn = 0;
-  var savings = 0;
-  var wants = 0;
+  var buckets = { Needs: 0, Wants: 0, Savings: 0, Transfer: 0 };
 
   for (var i = 0; i < transactions.length; i += 1) {
     var transaction = transactions[i];
-    if (transaction.direction === "income") continue;
-    var amount = Number(transaction.amount || 0);
-    if (transaction.bucket === "Savings") {
-      savings += amount;
-    } else {
-      totalBurn += amount;
-    }
-    if (transaction.bucket === "Wants") wants += amount;
+    var countsTowardBurn = transaction.countsTowardBurn === true || String(transaction.countsTowardBurn).toLowerCase() === "true";
+    if (transaction.direction === "income" || (transaction.direction === "transfer" && !countsTowardBurn)) continue;
+    var rawAmount = transaction.direction === "transfer" && transaction.burnAmount !== "" && transaction.burnAmount !== undefined
+      ? Number(transaction.burnAmount || 0)
+      : Number(transaction.amount || 0);
+    var amount = rawAmount * (transaction.direction === "transfer" && Number(transaction.burnEffect || 1) < 0 ? -1 : 1);
+    var bucket = transaction.bucket || "Transfer";
+    if (buckets[bucket] === undefined) buckets[bucket] = 0;
+    buckets[bucket] += amount;
   }
 
-  var total = totalBurn + savings;
+  var total = 0;
+  for (var key in buckets) {
+    if (Object.prototype.hasOwnProperty.call(buckets, key)) {
+      buckets[key] = Math.max(0, buckets[key]);
+      total += buckets[key];
+    }
+  }
+  var savings = buckets.Savings || 0;
+  var wants = buckets.Wants || 0;
   return {
-    totalBurn: totalBurn,
-    savingsRate: total ? Math.round((savings / total) * 100) : 0,
+    totalBurn: total,
+    savingsRate: total ? Math.max(0, Math.round((savings / total) * 100)) : 0,
     unplanned: Math.max(0, wants - total * 0.3)
   };
 }

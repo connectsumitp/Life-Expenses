@@ -34,7 +34,15 @@ var HEADERS = {
     "source",
     "type",
     "note",
-    "userId"
+    "userId",
+    "fromAccountId",
+    "fromAccount",
+    "toAccountId",
+    "toAccount",
+    "countsAsSavings",
+    "countsTowardBurn",
+    "burnEffect",
+    "burnAmount"
   ]
 };
 
@@ -108,9 +116,15 @@ function handlePost_(e) {
   }
 
   if (action === "saveAccounts") {
+    var accountLock = LockService.getScriptLock();
+    accountLock.waitLock(10000);
     var accounts = normalizeAccounts_(payload.accounts);
-    writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts, userId);
-    return json_({ ok: true, action: action, accounts: accounts });
+    try {
+      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, accounts, userId);
+      return json_({ ok: true, action: action, accounts: accounts });
+    } finally {
+      accountLock.releaseLock();
+    }
   }
 
   if (action === "saveBudgets") {
@@ -125,26 +139,55 @@ function handlePost_(e) {
     return json_({ ok: true, action: action, recurringRules: recurringRules });
   }
 
-  if (action === "addExpense" || action === "addIncome") {
-    var direction = action === "addIncome" ? "income" : "expense";
+  if (action === "addExpense" || action === "addIncome" || action === "addTransfer") {
+    var transactionLock = LockService.getScriptLock();
+    transactionLock.waitLock(10000);
+    var direction = action === "addIncome" ? "income" : action === "addTransfer" ? "transfer" : "expense";
     var row = normalizeTransaction_(payload, direction);
     row.userId = userId;
-    upsertUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), row, userId);
-    if (Array.isArray(payload.accounts)) {
-      var nextAccounts = normalizeAccounts_(payload.accounts);
-      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, nextAccounts, userId);
+    try {
+      var transactionSheet = ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
+      var existingTransaction = getUserTransactionById_(transactionSheet, row.id, userId);
+      var nextAccounts;
+      if (existingTransaction) {
+        upsertUserTransaction_(transactionSheet, row, userId);
+        nextAccounts = normalizeAccounts_(filterByUser_(readObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts)), userId));
+      } else {
+        nextAccounts = mutateAccountsForTransaction_(ss, row, userId, 1);
+        try {
+          upsertUserTransaction_(transactionSheet, row, userId);
+        } catch (writeError) {
+          mutateAccountsForTransaction_(ss, row, userId, -1);
+          throw writeError;
+        }
+      }
+      return json_({ ok: true, action: action, transaction: row, accounts: nextAccounts });
+    } finally {
+      transactionLock.releaseLock();
     }
-    return json_({ ok: true, action: action, transaction: row });
   }
 
   if (action === "deleteTransaction") {
+    var deleteLock = LockService.getScriptLock();
+    deleteLock.waitLock(10000);
     var deletedId = String(payload.transactionId || payload.id || "").trim();
-    var deleted = deleteUserTransaction_(ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions), deletedId, userId);
-    if (Array.isArray(payload.accounts)) {
-      var replacementAccounts = normalizeAccounts_(payload.accounts);
-      writeUserObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts), HEADERS.accounts, replacementAccounts, userId);
+    try {
+      var deleteSheet = ensureSheet_(ss, SHEETS.transactions, HEADERS.transactions);
+      var deletedTransaction = getUserTransactionById_(deleteSheet, deletedId, userId);
+      var replacementAccounts = deletedTransaction
+        ? mutateAccountsForTransaction_(ss, deletedTransaction, userId, -1)
+        : normalizeAccounts_(filterByUser_(readObjects_(ensureSheet_(ss, SHEETS.accounts, HEADERS.accounts)), userId));
+      var deleted;
+      try {
+        deleted = deleteUserTransaction_(deleteSheet, deletedId, userId);
+      } catch (deleteError) {
+        if (deletedTransaction) mutateAccountsForTransaction_(ss, deletedTransaction, userId, 1);
+        throw deleteError;
+      }
+      return json_({ ok: true, action: action, deleted: deleted, transactionId: deletedId, accounts: replacementAccounts });
+    } finally {
+      deleteLock.releaseLock();
     }
-    return json_({ ok: true, action: action, deleted: deleted, transactionId: deletedId });
   }
 
   if (action === "updateGroww") {

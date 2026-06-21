@@ -4,7 +4,7 @@ import path from "node:path";
 
 const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const port = 9300 + Math.floor(Math.random() * 400);
-const appUrl = "http://localhost:5173/";
+const appUrl = process.env.UAT_APP_URL || "http://localhost:5173/";
 const screenshotDir = path.resolve(".uat-screenshots");
 const profileDir = path.resolve(`.chrome-uat-profile-${Date.now()}-${Math.floor(Math.random() * 1000)}`);
 
@@ -228,7 +228,7 @@ async function waitForPageReady(cdp) {
   const start = Date.now();
   while (Date.now() - start < 12000) {
     const ready = await evalInPage(cdp, `
-      (() => document.querySelectorAll(".entry-tab").length === 3
+      (() => document.querySelectorAll(".entry-tab").length === 4
         && document.querySelectorAll(".journal-filters select").length >= 6
         && document.querySelectorAll(".planner-tab").length === 2)()
     `);
@@ -327,7 +327,7 @@ async function runInteractionTests(cdp) {
   await setNativeValue(cdp, ".user-gate input[type='password']", "wrong-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(150);
-  const alternateWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
+  const alternateWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 4`);
   record("workspace gate treats alternate private key as separate workspace", alternateWorkspaceOpens, "");
   await evalInPage(cdp, `document.querySelector(".user-chip").click()`);
   await wait(150);
@@ -335,7 +335,7 @@ async function runInteractionTests(cdp) {
   await setNativeValue(cdp, ".user-gate input[type='password']", "uat-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(250);
-  const correctWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
+  const correctWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 4`);
   record("workspace gate accepts matching email and key", correctWorkspaceOpens, "");
 
   await evalInPage(cdp, `
@@ -629,6 +629,20 @@ async function runInteractionTests(cdp) {
     })()
   `);
   record("portfolio total equals account balances", portfolioRollup.accountTotal === portfolioRollup.portfolioTotal && portfolioRollup.sbiValue === "123456", JSON.stringify(portfolioRollup));
+
+  await setNativeValue(cdp, ".amount-field input", "1");
+  await evalInPage(cdp, `document.querySelector(".submit-button").click()`);
+  await wait(80);
+  const overdraftBlocked = await evalInPage(cdp, `
+    (() => ({
+      amountRetained: document.querySelector(".amount-field input").value === "1",
+      noPost: !window.__uatPosts.some((post) => post.action === "addExpense" && Number(post.amount) === 1),
+      status: document.querySelector(".panel-kicker strong")?.innerText || "",
+    }))()
+  `);
+  record("expense overdraft is blocked without changing accounts", overdraftBlocked.amountRetained && overdraftBlocked.noPost && overdraftBlocked.status.toLowerCase().includes("available"), JSON.stringify(overdraftBlocked));
+  await setNativeValue(cdp, ".amount-field input", "");
+  await evalInPage(cdp, `[...document.querySelectorAll(".account-grid .account-token")].find((item) => item.innerText.includes("SBI Account"))?.click()`);
 
   await setNativeValue(cdp, ".amount-field input", "321");
   await setNativeValue(cdp, "input[aria-label='Entry date']", "2026-07-20");

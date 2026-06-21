@@ -270,8 +270,99 @@ button:active {
 
 .entry-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
+}
+
+.transfer-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.transfer-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.transfer-route > svg {
+  margin-bottom: 15px;
+  color: var(--accent);
+}
+
+.savings-transfer-toggle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  cursor: pointer;
+}
+
+.savings-transfer-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.savings-transfer-toggle > span {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: #d7d5cf;
+  transition: background 180ms ease;
+}
+
+.savings-transfer-toggle > span::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(43, 45, 66, 0.2);
+  content: "";
+  transition: transform 180ms ease;
+}
+
+.savings-transfer-toggle input:checked + span {
+  background: #6f8f78;
+}
+
+.savings-transfer-toggle input:checked + span::after {
+  transform: translateX(16px);
+}
+
+.savings-transfer-toggle input:focus-visible + span {
+  outline: 2px solid #2b2d42;
+  outline-offset: 2px;
+}
+
+.savings-transfer-toggle div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.savings-transfer-toggle strong,
+.savings-transfer-toggle small {
+  font-family: var(--mono-font);
+}
+
+.savings-transfer-toggle small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.transaction-row .is-transfer {
+  color: #6f8f78;
 }
 
 .entry-tab {
@@ -681,11 +772,12 @@ button:active {
 }
 
 .add-editor-token {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 0.55fr) auto auto;
   border-style: dashed;
 }
 
-.add-editor-token input {
+.add-editor-token input,
+.add-editor-token select {
   min-width: 0;
   border: 0;
   outline: 0;
@@ -2204,7 +2296,7 @@ button:active {
 
 .editable-account-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.48fr);
+  grid-template-columns: minmax(0, 1fr) minmax(78px, 0.36fr) minmax(96px, 0.48fr);
 }
 
 .editable-account-line label {
@@ -2229,6 +2321,21 @@ button:active {
   font-weight: 800;
 }
 
+.editable-account-line select,
+.account-add-line select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--ink);
+  font-family: var(--mono-font);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
 .account-line span {
   display: inline-flex;
   min-width: 0;
@@ -2245,7 +2352,7 @@ button:active {
 
 .account-add-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(78px, 0.5fr) auto auto;
   align-items: center;
 }
 
@@ -2803,6 +2910,7 @@ button:active {
   .entry-form,
   .category-grid,
   .channel-panel,
+  .transfer-panel,
   .selected-flow-card,
   .investment-summary,
   .dashboard-header,
@@ -2890,6 +2998,7 @@ button:active {
   .category-grid,
   .account-grid,
   .channel-panel,
+  .transfer-panel,
   .selected-flow-card,
   .asset-entry-grid {
     grid-column: 1 / -1;
@@ -2948,6 +3057,15 @@ button:active {
   .entry-tab {
     min-height: 32px;
     font-size: 0.62rem;
+  }
+
+  .transfer-route {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-route > svg {
+    margin: -2px auto;
+    transform: rotate(90deg);
   }
 
   .account-grid {
@@ -3189,11 +3307,11 @@ button:active {
   }
 
   .editable-account-line {
-    grid-template-columns: minmax(0, 1.05fr) minmax(104px, 0.95fr);
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 0.55fr) minmax(96px, 0.7fr);
   }
 
   .account-add-line {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 0.55fr) auto auto;
   }
 
   .account-line span,

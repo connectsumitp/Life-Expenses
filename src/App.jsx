@@ -32,14 +32,15 @@ import {
   Trash2,
   TrendingUp,
   WalletCards,
+  ArrowRightLeft,
   X,
 } from "lucide-react";
 
 const RETIRED_APPS_SCRIPT_URLS = new Set([
-  "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec",
   "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec",
+  "https://script.google.com/macros/s/AKfycbx4-RINiUA3u4MLoep-t5gjl0mMKeh02gX4zLcIZ1KhMATzcf3XvqoMWJC7Cm5Guj-LIA/exec",
 ]);
-const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx4-RINiUA3u4MLoep-t5gjl0mMKeh02gX4zLcIZ1KhMATzcf3XvqoMWJC7Cm5Guj-LIA/exec";
+const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec";
 const CONFIGURED_APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
 const APPS_SCRIPT_URL =
   CONFIGURED_APPS_SCRIPT_URL && !RETIRED_APPS_SCRIPT_URLS.has(CONFIGURED_APPS_SCRIPT_URL)
@@ -77,6 +78,7 @@ const DEFAULT_INCOME_SOURCES = [
 const ENTRY_TABS = [
   { id: "expense", label: "Expenses" },
   { id: "income", label: "Income" },
+  { id: "transfer", label: "Transfer" },
   { id: "asset", label: "Assets" },
 ];
 
@@ -303,7 +305,7 @@ function makeEntry(amount, category, direction = "expense", accountId = "sbi", s
     direction,
     category,
     accountId,
-    bucket: direction === "expense" ? getBucket(category) : "Income",
+    bucket: direction === "expense" ? getBucket(category) : direction === "income" ? "Income" : "Transfer",
     timestamp: date.toISOString(),
     date: entryDate,
     dayString: date.toLocaleDateString("en-US", { weekday: "short" }),
@@ -314,6 +316,42 @@ function makeEntry(amount, category, direction = "expense", accountId = "sbi", s
     weekOfMonth: getWeekOfMonth(date),
     note,
   };
+}
+
+function isBurnTransaction(transaction) {
+  return transaction.direction === "expense" || (transaction.direction === "transfer" && transaction.countsTowardBurn === true);
+}
+
+function getBurnAmount(transaction) {
+  const amount = Number(transaction.amount || 0);
+  const burnAmount = transaction.direction === "transfer" ? Number(transaction.burnAmount ?? amount) : amount;
+  return transaction.direction === "transfer" && Number(transaction.burnEffect || 1) < 0 ? -burnAmount : burnAmount;
+}
+
+function getSavingsBurnBasis(transactions, accountId) {
+  return Math.max(
+    0,
+    transactions.reduce((basis, transaction) => {
+      if (transaction.direction !== "transfer" || !transaction.countsTowardBurn || transaction.bucket !== "Savings") return basis;
+      const burnAmount = Math.abs(getBurnAmount(transaction));
+      if (Number(transaction.burnEffect || 1) > 0 && transaction.toAccountId === accountId) return basis + burnAmount;
+      if (Number(transaction.burnEffect || 1) < 0 && transaction.fromAccountId === accountId) return basis - burnAmount;
+      return basis;
+    },
+    0),
+  );
+}
+
+function getBucketTotals(transactions) {
+  const totals = transactions.reduce((memo, transaction) => {
+    const key = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
+    memo[key] = Number(memo[key] || 0) + Number(transaction.amount || 0);
+    return memo;
+  }, { needs: 0, wants: 0, savings: 0, transfer: 0 });
+  Object.keys(totals).forEach((key) => {
+    totals[key] = Math.max(0, totals[key]);
+  });
+  return totals;
 }
 
 async function apiGetDashboard(userId) {
@@ -557,7 +595,12 @@ function normalizeDashboardTransactions(transactions) {
         ...transaction,
         id: stableId,
         category,
-        bucket: transaction.direction === "income" ? "Income" : getBucket(category),
+        bucket:
+          transaction.direction === "income"
+            ? "Income"
+            : transaction.direction === "transfer"
+              ? transaction.bucket || "Transfer"
+              : getBucket(category),
       };
     })
     .filter((transaction) => {
@@ -634,6 +677,10 @@ function App() {
   const [category, setCategory] = useState("");
   const [incomeSource, setIncomeSource] = useState(DEFAULT_INCOME_SOURCES[0]);
   const [selectedAccount, setSelectedAccount] = useState(DEFAULT_ACCOUNTS[0].id);
+  const [transferFromAccount, setTransferFromAccount] = useState(DEFAULT_ACCOUNTS[0].id);
+  const [transferToAccount, setTransferToAccount] = useState(DEFAULT_ACCOUNTS[1].id);
+  const [transferCountsAsSavings, setTransferCountsAsSavings] = useState(false);
+  const [transferCountsTowardBurn, setTransferCountsTowardBurn] = useState(false);
   const [accounts, setAccounts] = useState(() => normalizeAccounts(useBridgeSource() ? DEFAULT_ACCOUNTS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
   const [assetName, setAssetName] = useState("");
   const [assetType, setAssetType] = useState("Bank");
@@ -672,6 +719,7 @@ function App() {
   const [newCategoryDraft, setNewCategoryDraft] = useState("");
   const [addingAccount, setAddingAccount] = useState(false);
   const [newAccountDraft, setNewAccountDraft] = useState("");
+  const [newAccountType, setNewAccountType] = useState("Bank");
   const allocationEditRef = useRef(null);
   const allocationLastEditedRef = useRef(null);
 
@@ -795,6 +843,15 @@ function App() {
   }, [accounts, activeUserId]);
 
   useEffect(() => {
+    if (!accounts.length) return;
+    const ids = new Set(accounts.map((account) => account.id));
+    if (!ids.has(transferFromAccount)) setTransferFromAccount(accounts[0].id);
+    if (!ids.has(transferToAccount) || transferToAccount === transferFromAccount) {
+      setTransferToAccount(accounts.find((account) => account.id !== transferFromAccount)?.id || accounts[0].id);
+    }
+  }, [accounts, transferFromAccount, transferToAccount]);
+
+  useEffect(() => {
     if (!activeUserId) return;
     writeStoredTransactions(activeUserId, transactions);
   }, [transactions, activeUserId]);
@@ -821,11 +878,15 @@ function App() {
   const journalSpendTotal = useMemo(
     () =>
       filteredJournalEntries
-        .filter((transaction) => transaction.direction !== "income")
-        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+        .filter(isBurnTransaction)
+        .reduce((sum, transaction) => sum + getBurnAmount(transaction), 0),
     [filteredJournalEntries],
   );
   const selectedAccountLabel = accounts.find((account) => account.id === selectedAccount)?.name || "Account";
+  const transferFrom = accounts.find((account) => account.id === transferFromAccount);
+  const transferTo = accounts.find((account) => account.id === transferToAccount);
+  const isTransferSavingsReversal = transferCountsAsSavings && transferFrom?.type === "Market" && transferTo?.type !== "Market";
+  const transferBurnBasis = transferFrom ? getSavingsBurnBasis(transactions, transferFrom.id) : 0;
   const activeCategory = entryMode === "income" ? incomeSource : category;
   const activeBucket = categoryBuckets[category] || getBucket(category);
   const canChooseChannel = entryMode !== "expense" || Boolean(category);
@@ -880,7 +941,7 @@ function App() {
     try {
       await Promise.all(
         localOnlyTransactions.map((transaction) =>
-          apiPost(transaction.direction === "income" ? "addIncome" : "addExpense", {
+          apiPost(transaction.direction === "income" ? "addIncome" : transaction.direction === "transfer" ? "addTransfer" : "addExpense", {
             ...transaction,
             type: transaction.bucket,
             source: transaction.source || transaction.category,
@@ -1228,7 +1289,7 @@ function App() {
     const nextAccount = {
       id: makeSlug(cleanName, accounts.map((account) => account.id)),
       name: cleanName,
-      type: "Bank",
+      type: newAccountType,
       balance: 0,
       updatedAt: new Date().toISOString(),
     };
@@ -1243,12 +1304,20 @@ function App() {
     setAccounts(nextAccounts);
     setSelectedAccount(nextAccount.id);
     setNewAccountDraft("");
+    setNewAccountType("Bank");
     setAddingAccount(false);
     saveAccountsToBridge(nextAccounts);
   }
 
   function deleteAccount(accountId) {
     if (accounts.length <= 1) return;
+    const isReferenced = transactions.some(
+      (transaction) => transaction.accountId === accountId || transaction.fromAccountId === accountId || transaction.toAccountId === accountId,
+    );
+    if (isReferenced) {
+      setStatus("Account has journal history and cannot be deleted");
+      return;
+    }
     const previousAccounts = accounts;
     const previousSelected = selectedAccount;
     const nextAccounts = accounts.filter((account) => account.id !== accountId);
@@ -1264,15 +1333,24 @@ function App() {
     saveAccountsToBridge(nextAccounts);
   }
 
-  function adjustAccount(accountId, delta) {
+  function adjustAccount(accountId, delta, persist = true) {
     const nextAccounts = accounts.map((account) =>
       account.id === accountId
         ? { ...account, balance: Math.max(0, Number(account.balance || 0) + delta), updatedAt: new Date().toISOString() }
         : account,
     );
     setAccounts(nextAccounts);
-    saveAccountsToBridge(nextAccounts);
+    if (persist) saveAccountsToBridge(nextAccounts);
     return nextAccounts;
+  }
+
+  function applyTransfer(accountsToUpdate, fromAccountId, toAccountId, transferAmount) {
+    const updatedAt = new Date().toISOString();
+    return accountsToUpdate.map((account) => {
+      if (account.id === fromAccountId) return { ...account, balance: Number(account.balance || 0) - transferAmount, updatedAt };
+      if (account.id === toAccountId) return { ...account, balance: Number(account.balance || 0) + transferAmount, updatedAt };
+      return account;
+    });
   }
 
   function deleteTransaction(transactionId) {
@@ -1285,7 +1363,9 @@ function App() {
     const previousAccounts = accounts;
     const nextTransactions = transactions.filter((transaction) => transaction.id !== transactionId);
     const balanceDelta = deletedTransaction.direction === "income" ? -deletedTransaction.amount : deletedTransaction.amount;
-    const nextAccounts = deletedTransaction.accountId
+    const nextAccounts = deletedTransaction.direction === "transfer"
+      ? applyTransfer(accounts, deletedTransaction.toAccountId, deletedTransaction.fromAccountId, Number(deletedTransaction.amount || 0))
+      : deletedTransaction.accountId
       ? accounts.map((account) =>
           account.id === deletedTransaction.accountId
             ? { ...account, balance: Math.max(0, Number(account.balance || 0) + balanceDelta), updatedAt: new Date().toISOString() }
@@ -1298,12 +1378,15 @@ function App() {
       setAccounts(previousAccounts);
       writeStoredTransactions(activeUserId, previousTransactions);
       if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), previousAccounts);
-      apiPost(deletedTransaction.direction === "income" ? "addIncome" : "addExpense", {
+      apiPost(deletedTransaction.direction === "income" ? "addIncome" : deletedTransaction.direction === "transfer" ? "addTransfer" : "addExpense", {
         ...deletedTransaction,
-        accounts: previousAccounts,
-      }, activeUserId).catch(() => {
-        setStatus("Entry restored locally, bridge failed");
-      });
+      }, activeUserId)
+        .then((data) => {
+          if (Array.isArray(data?.accounts)) setAccounts(normalizeAccounts(data.accounts));
+        })
+        .catch(() => {
+          setStatus("Entry restored locally, bridge failed");
+        });
     });
 
     setTransactions(nextTransactions);
@@ -1314,8 +1397,8 @@ function App() {
     apiPost("deleteTransaction", {
       id: transactionId,
       transactionId,
-      accounts: nextAccounts,
-    }, activeUserId).then(() => {
+    }, activeUserId).then((data) => {
+      if (Array.isArray(data?.accounts)) setAccounts(normalizeAccounts(data.accounts));
       setStatus("Entry deleted from sheet");
     }).catch(() => {
       setStatus("Entry deleted locally, bridge failed");
@@ -1350,6 +1433,71 @@ function App() {
       return;
     }
 
+    const selectedEntryAccount = accounts.find((account) => account.id === selectedAccount);
+    if (entryMode === "expense" && (!selectedEntryAccount || numericAmount > Number(selectedEntryAccount.balance || 0))) {
+      setStatus(`Only ₹${formatMoney(selectedEntryAccount?.balance || 0)} is available in ${selectedEntryAccount?.name || "this account"}`);
+      return;
+    }
+
+    if (entryMode === "transfer") {
+      const fromAccount = accounts.find((account) => account.id === transferFromAccount);
+      const toAccount = accounts.find((account) => account.id === transferToAccount);
+      if (!fromAccount || !toAccount) {
+        setStatus("Choose both transfer accounts");
+        return;
+      }
+      if (fromAccount.id === toAccount.id) {
+        setStatus("Choose two different accounts");
+        return;
+      }
+      if (numericAmount > Number(fromAccount.balance || 0)) {
+        setStatus(`Only ₹${formatMoney(fromAccount.balance)} is available in ${fromAccount.name}`);
+        return;
+      }
+
+      const isSavingsReversal = transferCountsAsSavings && fromAccount.type === "Market" && toAccount.type !== "Market";
+      const availableBurnBasis = isSavingsReversal ? getSavingsBurnBasis(transactions, fromAccount.id) : numericAmount;
+      const burnAmount = transferCountsTowardBurn ? Math.min(numericAmount, availableBurnBasis) : 0;
+      const entry = {
+        ...makeEntry(
+          numericAmount,
+          transferCountsAsSavings ? "Investments" : `${fromAccount.name} → ${toAccount.name}`,
+          "transfer",
+          fromAccount.id,
+          dateFromInputValue(entryDate),
+          note.trim(),
+        ),
+        bucket: transferCountsAsSavings ? "Savings" : "Transfer",
+        countsAsSavings: transferCountsAsSavings,
+        countsTowardBurn: transferCountsTowardBurn,
+        burnEffect: transferCountsTowardBurn && isSavingsReversal ? -1 : transferCountsTowardBurn ? 1 : 0,
+        burnAmount,
+        fromAccountId: fromAccount.id,
+        fromAccount: fromAccount.name,
+        toAccountId: toAccount.id,
+        toAccount: toAccount.name,
+      };
+      const nextAccounts = applyTransfer(accounts, fromAccount.id, toAccount.id, numericAmount);
+      const nextTransactions = [entry, ...transactions];
+      setTransactions(nextTransactions);
+      setAccounts(nextAccounts);
+      writeStoredTransactions(activeUserId, nextTransactions);
+      if (activeUserId) writeStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), nextAccounts);
+      setAmount("");
+      setNote("");
+      setEntryDate(getDateInputValue());
+      setTransferCountsAsSavings(false);
+      setTransferCountsTowardBurn(false);
+      setStatus("Transfer logged");
+      apiPost("addTransfer", entry, activeUserId)
+        .then((data) => {
+          if (Array.isArray(data?.accounts)) setAccounts(normalizeAccounts(data.accounts));
+          setStatus(APPS_SCRIPT_URL ? "Transfer synced" : "Saved locally");
+        })
+        .catch(() => setStatus("Transfer saved locally, bridge failed"));
+      return;
+    }
+
     if (entryMode === "asset") {
       const account = addOrUpdateAsset(assetName || selectedAccountLabel, assetType, numericAmount);
       if (!account) return;
@@ -1381,7 +1529,7 @@ function App() {
       writeStoredTransactions(activeUserId, nextTransactions);
       return nextTransactions;
     });
-    const nextAccounts = adjustAccount(selectedAccount, direction === "expense" ? -numericAmount : numericAmount);
+    const nextAccounts = adjustAccount(selectedAccount, direction === "expense" ? -numericAmount : numericAmount, false);
     setAmount("");
     setNote("");
     setEntryDate(getDateInputValue());
@@ -1394,9 +1542,9 @@ function App() {
         source: activeCategory,
         account: selectedAccountLabel,
         accountId: selectedAccount,
-        accounts: nextAccounts,
       }, activeUserId)
-      .then(() => {
+      .then((data) => {
+        if (Array.isArray(data?.accounts)) setAccounts(normalizeAccounts(data.accounts));
         setStatus(APPS_SCRIPT_URL ? `${direction === "expense" ? "Expense" : "Income"} synced` : "Saved locally");
       })
       .catch(() => {
@@ -1719,7 +1867,66 @@ function App() {
             </div>
           )}
 
-          {entryMode !== "asset" && canChooseChannel && (
+          {entryMode === "transfer" && (
+            <div className="transfer-panel fade-panel">
+              <div className="transfer-route">
+                <label className="mini-input">
+                  <span>From</span>
+                  <select value={transferFromAccount} onChange={(event) => setTransferFromAccount(event.target.value)}>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name} · ₹{formatMoney(account.balance)}</option>
+                    ))}
+                  </select>
+                </label>
+                <ArrowRightLeft aria-hidden="true" size={20} />
+                <label className="mini-input">
+                  <span>To</span>
+                  <select value={transferToAccount} onChange={(event) => setTransferToAccount(event.target.value)}>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>{account.name} · ₹{formatMoney(account.balance)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="savings-transfer-toggle">
+                <input
+                  checked={transferCountsAsSavings}
+                  onChange={(event) => {
+                    setTransferCountsAsSavings(event.target.checked);
+                    if (event.target.checked) setTransferCountsTowardBurn(true);
+                  }}
+                  type="checkbox"
+                />
+                <span aria-hidden="true" />
+                <div>
+                  <strong>Count as Savings</strong>
+                  <small>Include this transfer once in Savings burn and allocation.</small>
+                </div>
+              </label>
+              <label className="savings-transfer-toggle burn-transfer-toggle">
+                <input
+                  checked={transferCountsTowardBurn}
+                  onChange={(event) => setTransferCountsTowardBurn(event.target.checked)}
+                  type="checkbox"
+                />
+                <span aria-hidden="true" />
+                <div>
+                  <strong>
+                    {isTransferSavingsReversal
+                      ? "Remove from Burn"
+                      : "Add to Burn"}
+                  </strong>
+                  <small>
+                    {isTransferSavingsReversal
+                      ? `Reverse up to ₹${formatMoney(transferBurnBasis)} of previously counted savings burn.`
+                      : "Include this amount in Total Burn and its trend."}
+                  </small>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {entryMode !== "asset" && entryMode !== "transfer" && canChooseChannel && (
             <div className="channel-panel fade-panel">
               <span className="section-label">{entryMode === "expense" ? "Paid through" : "Received into"}</span>
               <div className="account-grid" role="radiogroup" aria-label="Account or asset source">
@@ -1762,9 +1969,17 @@ function App() {
                         if (event.key === "Escape") {
                           setAddingAccount(false);
                           setNewAccountDraft("");
+                          setNewAccountType("Bank");
                         }
                       }}
                     />
+                    <select aria-label="New account type" value={newAccountType} onChange={(event) => setNewAccountType(event.target.value)}>
+                      <option>Bank</option>
+                      <option>Market</option>
+                      <option>Cash</option>
+                      <option>Real Estate</option>
+                      <option>Other</option>
+                    </select>
                     <button aria-label="Save account" className="token-action-button" onClick={addAccount} type="button">
                       <Check size={14} />
                     </button>
@@ -1774,6 +1989,7 @@ function App() {
                       onClick={() => {
                         setAddingAccount(false);
                         setNewAccountDraft("");
+                        setNewAccountType("Bank");
                       }}
                       type="button"
                     >
@@ -1791,8 +2007,8 @@ function App() {
           )}
 
           <button className="submit-button" type="submit">
-            {busy ? <Loader2 className="spin" size={18} /> : entryMode === "asset" ? <Plus size={18} /> : <Send size={18} />}
-            <span>{entryMode === "asset" ? "Save source" : "Log entry"}</span>
+            {busy ? <Loader2 className="spin" size={18} /> : entryMode === "asset" ? <Plus size={18} /> : entryMode === "transfer" ? <ArrowRightLeft size={18} /> : <Send size={18} />}
+            <span>{entryMode === "asset" ? "Save source" : entryMode === "transfer" ? "Move money" : "Log entry"}</span>
           </button>
         </form>
 
@@ -1858,6 +2074,7 @@ function App() {
                 <option value="all">All entries</option>
                 <option value="expense">Expenses</option>
                 <option value="income">Income</option>
+                <option value="transfer">Transfers</option>
               </select>
             </label>
             <label>
@@ -1876,8 +2093,8 @@ function App() {
                 <strong>{transaction.category}</strong>
                 {transaction.note && <em>{transaction.note}</em>}
               </div>
-              <b className={transaction.direction === "income" ? "is-income" : "is-expense"}>
-                {transaction.direction === "income" ? "+" : "-"}₹{formatMoney(transaction.amount)}
+              <b className={transaction.direction === "income" ? "is-income" : transaction.direction === "transfer" ? "is-transfer" : "is-expense"}>
+                {transaction.direction === "income" ? "+" : transaction.direction === "transfer" ? "↔" : "-"}₹{formatMoney(transaction.amount)}
               </b>
               <button
                 aria-label={`Delete ${transaction.category} entry`}
@@ -2530,6 +2747,17 @@ function App() {
                         <Landmark size={13} />
                         <EditableText value={account.name} onCommit={(nextName) => updateAccountField(account.id, { name: nextName.trim() || account.name }, "account name")} />
                       </label>
+                      <select
+                        aria-label={`${account.name} type`}
+                        value={account.type}
+                        onChange={(event) => updateAccountField(account.id, { type: event.target.value }, `${account.name} type`)}
+                      >
+                        <option>Bank</option>
+                        <option>Market</option>
+                        <option>Cash</option>
+                        <option>Real Estate</option>
+                        <option>Other</option>
+                      </select>
                       <EditableNumber
                         aria-label={`${account.name} balance`}
                         value={account.balance}
@@ -2554,9 +2782,17 @@ function App() {
                             if (event.key === "Escape") {
                               setAddingAccount(false);
                               setNewAccountDraft("");
+                              setNewAccountType("Bank");
                             }
                           }}
                         />
+                        <select aria-label="New account type" value={newAccountType} onChange={(event) => setNewAccountType(event.target.value)}>
+                          <option>Bank</option>
+                          <option>Market</option>
+                          <option>Cash</option>
+                          <option>Real Estate</option>
+                          <option>Other</option>
+                        </select>
                         <button aria-label="Save account" className="token-action-button" onClick={addAccount} type="button">
                           <Check size={14} />
                         </button>
@@ -2566,6 +2802,7 @@ function App() {
                           onClick={() => {
                             setAddingAccount(false);
                             setNewAccountDraft("");
+                            setNewAccountType("Bank");
                           }}
                           type="button"
                         >
@@ -2854,7 +3091,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const currentWeek = getWeekOfMonth(now);
-  const expenseTransactions = transactions.filter((transaction) => transaction.direction !== "income");
+  const expenseTransactions = transactions.filter(isBurnTransaction).map((transaction) => ({ ...transaction, amount: getBurnAmount(transaction) }));
   const monthlyIncomeTransactions = transactions.filter(
     (transaction) => transaction.direction === "income" && Number(transaction.monthNumber || 0) === currentMonth && Number(transaction.year || 0) === currentYear,
   );
@@ -2886,41 +3123,25 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     period === "weekly"
       ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
       : Number(budgets.monthlyTotal || 0) * (period === "yearly" ? now.getMonth() + 1 : 1);
-  const totals = metricExpenseTransactions.reduce(
-    (memo, transaction) => {
-      const key = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
-      if (memo[key] === undefined) memo[key] = 0;
-      memo[key] += Number(transaction.amount || 0);
-      return memo;
-    },
-    { needs: 0, wants: 0, savings: 0 },
-  );
-  const total = totals.needs + totals.wants + totals.savings;
+  const totals = getBucketTotals(metricExpenseTransactions);
+  const total = Object.values(totals).reduce((sum, value) => sum + Number(value || 0), 0);
   const monthlyIncome = monthlyIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const metricIncome = metricIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
-  const chartTotals = chartExpenseTransactions.reduce(
-    (memo, transaction) => {
-      const key = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
-      if (memo[key] === undefined) memo[key] = 0;
-      memo[key] += Number(transaction.amount || 0);
-      return memo;
-    },
-    { needs: 0, wants: 0, savings: 0 },
-  );
-  const chartTotal = chartTotals.needs + chartTotals.wants + chartTotals.savings;
+  const chartTotals = getBucketTotals(chartExpenseTransactions);
+  const chartTotal = Object.values(chartTotals).reduce((sum, value) => sum + Number(value || 0), 0);
   const chartIncome = chartIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const chartAllocationBase = chartIncome || chartTotal;
   const allocationBase = metricIncome || total;
   const computedTotalBurn = total;
-  const computedSavingsRate = chartAllocationBase ? Math.round((chartTotals.savings / chartAllocationBase) * 100) : 0;
+  const computedSavingsRate = chartAllocationBase ? Math.max(0, Math.round((chartTotals.savings / chartAllocationBase) * 100)) : 0;
   const computedUnplanned = Math.max(0, chartTotals.wants - chartAllocationBase * ((allocationTargets.wants || DEFAULT_ALLOCATION_TARGETS.wants) / 100));
   const totalBurn = computedTotalBurn;
   const savingsRate = computedSavingsRate;
   const unplanned = computedUnplanned;
   const allocations = {
-    needs: chartAllocationBase ? Math.round((chartTotals.needs / chartAllocationBase) * 100) : 0,
-    wants: chartAllocationBase ? Math.round((chartTotals.wants / chartAllocationBase) * 100) : 0,
-    savings: chartAllocationBase ? Math.max(0, 100 - Math.round((chartTotals.needs / chartAllocationBase) * 100) - Math.round((chartTotals.wants / chartAllocationBase) * 100)) : 0,
+    needs: chartAllocationBase ? Math.max(0, Math.round((chartTotals.needs / chartAllocationBase) * 100)) : 0,
+    wants: chartAllocationBase ? Math.max(0, Math.round((chartTotals.wants / chartAllocationBase) * 100)) : 0,
+    savings: chartAllocationBase ? Math.max(0, Math.round((chartTotals.savings / chartAllocationBase) * 100)) : 0,
   };
   const velocity = buildVelocity(expenseTransactions, period, now);
   const chartTarget =
@@ -2948,9 +3169,9 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   };
   const categoryNames = [...new Set([...categories, ...expenseTransactions.map((transaction) => transaction.category).filter(Boolean)])];
   const categoryProgress = categoryNames.map((name) => {
-    const spent = monthlyExpenseTransactions
+    const spent = Math.max(0, monthlyExpenseTransactions
       .filter((transaction) => transaction.category === name)
-      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0));
     const limit = Number(budgets.categories[name] ?? getDefaultCategoryBudget(name));
     const percent = limit ? Math.round((spent / limit) * 100) : 0;
     const status = percent >= 100 ? "danger" : percent >= 80 ? "warn" : "calm";
@@ -3017,11 +3238,10 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     biggestCategory: biggest.name,
   };
   const portfolioTotal = accounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
-  const marketTotal =
-    accounts
-      .filter((account) => account.type === "Market")
-      .reduce((sum, account) => sum + Number(account.balance || 0), 0) ||
-    Number(assets.mutualFunds || 0) + Number(assets.stocks || 0);
+  const marketAccounts = accounts.filter((account) => account.type === "Market");
+  const marketTotal = marketAccounts.length
+    ? marketAccounts.reduce((sum, account) => sum + Number(account.balance || 0), 0)
+    : Number(assets.mutualFunds || 0) + Number(assets.stocks || 0);
   const liquidityTotal = Math.max(0, portfolioTotal - marketTotal);
   const marketShare = portfolioTotal ? Math.round((marketTotal / portfolioTotal) * 100) : 0;
   const insightCards = [
@@ -3097,17 +3317,18 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
 }
 
 function buildAnalyticsLegacy(transactions, accounts, assets, remoteMetrics, period, categories) {
-  const expenseTransactions = transactions.filter((transaction) => transaction.direction !== "income");
+  const expenseTransactions = transactions.filter(isBurnTransaction).map((transaction) => ({ ...transaction, amount: getBurnAmount(transaction) }));
   const totals = transactions.reduce(
     (memo, transaction) => {
-      if (transaction.direction === "income") return memo;
+      if (!isBurnTransaction(transaction)) return memo;
       const key = transaction.bucket.toLowerCase();
-      memo[key] += Number(transaction.amount || 0);
+      if (memo[key] === undefined) memo[key] = 0;
+      memo[key] += getBurnAmount(transaction);
       return memo;
     },
     { needs: 0, wants: 0, savings: 0 },
   );
-  const total = totals.needs + totals.wants + totals.savings;
+  const total = Math.max(0, Object.values(totals).reduce((sum, value) => sum + Number(value || 0), 0));
   const computedTotalBurn = total;
   const computedSavingsRate = total ? Math.round((totals.savings / total) * 100) : 0;
   const wantTarget = total * 0.3;
@@ -3179,36 +3400,33 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
   if (period === "monthly") {
     return [1, 2, 3, 4].map((week) => ({
       label: `W${week}`,
-      burn: expenseTransactions
+      burn: Object.values(getBucketTotals(expenseTransactions
         .filter(
           (transaction) =>
             Number(transaction.year || 0) === currentYear &&
             Number(transaction.monthNumber || 0) === currentMonth &&
             Number(transaction.weekOfMonth || 1) === week,
-        )
-        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+        ))).reduce((sum, value) => sum + value, 0),
     }));
   }
 
   if (period === "yearly") {
     return [currentYear - 2, currentYear - 1, currentYear].map((year) => ({
       label: String(year),
-      burn: expenseTransactions
-        .filter((transaction) => Number(transaction.year || 0) === year)
-        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+      burn: Object.values(getBucketTotals(expenseTransactions
+        .filter((transaction) => Number(transaction.year || 0) === year))).reduce((sum, value) => sum + value, 0),
     }));
   }
 
   return [1, 2, 3, 4].map((week) => ({
     label: `W${week}`,
-    burn: expenseTransactions
+    burn: Object.values(getBucketTotals(expenseTransactions
       .filter(
         (transaction) =>
           Number(transaction.year || 0) === currentYear &&
           Number(transaction.monthNumber || 0) === currentMonth &&
           Number(transaction.weekOfMonth || 1) === week,
-      )
-      .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
+      ))).reduce((sum, value) => sum + value, 0),
   }));
 }
 
