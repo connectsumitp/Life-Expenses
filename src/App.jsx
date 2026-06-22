@@ -38,9 +38,9 @@ import {
 
 const RETIRED_APPS_SCRIPT_URLS = new Set([
   "https://script.google.com/macros/s/AKfycbxvo1s3og9yNuLT87blSI5AImLCF3iR9eGlaK7PV9nLCpIQoBGDsHfUUkJVHHk9XGjK/exec",
-  "https://script.google.com/macros/s/AKfycbx4-RINiUA3u4MLoep-t5gjl0mMKeh02gX4zLcIZ1KhMATzcf3XvqoMWJC7Cm5Guj-LIA/exec",
+  "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec",
 ]);
-const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDgeOF-PKedZGKIt-_s1YJkv4QAEfw8yS-_I8xRfx7dUq3dPl6vWwmKIwvdOMsvUeL2g/exec";
+const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx4-RINiUA3u4MLoep-t5gjl0mMKeh02gX4zLcIZ1KhMATzcf3XvqoMWJC7Cm5Guj-LIA/exec";
 const CONFIGURED_APPS_SCRIPT_URL = (import.meta.env.VITE_APPS_SCRIPT_URL || "").trim();
 const APPS_SCRIPT_URL =
   CONFIGURED_APPS_SCRIPT_URL && !RETIRED_APPS_SCRIPT_URLS.has(CONFIGURED_APPS_SCRIPT_URL)
