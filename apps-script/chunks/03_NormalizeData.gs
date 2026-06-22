@@ -149,7 +149,9 @@ function normalizeReturnedTransaction_(transaction) {
     countsAsSavings: transaction.countsAsSavings === true || String(transaction.countsAsSavings).toLowerCase() === "true",
     countsTowardBurn: transaction.countsTowardBurn === true || String(transaction.countsTowardBurn).toLowerCase() === "true",
     burnEffect: Number(transaction.burnEffect || 0),
-    burnAmount: Number(transaction.burnAmount === "" || transaction.burnAmount === undefined ? transaction.amount || 0 : transaction.burnAmount)
+    burnAmount: Number(transaction.burnAmount === "" || transaction.burnAmount === undefined ? transaction.amount || 0 : transaction.burnAmount),
+    savingsEffect: Number(transaction.savingsEffect || 0),
+    savingsAmount: Number(transaction.savingsAmount === "" || transaction.savingsAmount === undefined ? transaction.amount || 0 : transaction.savingsAmount)
   };
 }
 
@@ -182,7 +184,9 @@ function normalizeTransaction_(payload, direction) {
     countsAsSavings: payload.countsAsSavings === true || String(payload.countsAsSavings).toLowerCase() === "true",
     countsTowardBurn: payload.countsTowardBurn === true || String(payload.countsTowardBurn).toLowerCase() === "true",
     burnEffect: Number(payload.burnEffect || 0),
-    burnAmount: Number(payload.burnAmount === undefined ? payload.amount || 0 : payload.burnAmount)
+    burnAmount: Number(payload.burnAmount === undefined ? payload.amount || 0 : payload.burnAmount),
+    savingsEffect: Number(payload.savingsEffect || 0),
+    savingsAmount: Number(payload.savingsAmount === undefined ? payload.amount || 0 : payload.savingsAmount)
   };
 }
 
@@ -203,15 +207,21 @@ function mutateAccountsForTransaction_(ss, transaction, userId, multiplier) {
   var creditId = direction === "transfer" ? transaction.toAccountId : direction === "income" ? transaction.accountId : "";
   var debitFound = !debitId;
   var creditFound = !creditId;
+  var reversal = Number(multiplier || 1) < 0;
 
   for (var i = 0; i < accounts.length; i += 1) {
     if (accounts[i].id === debitId) {
       debitFound = true;
-      if (Number(multiplier || 1) > 0 && Number(accounts[i].balance || 0) < Math.abs(amount)) {
+      if (!reversal && Number(accounts[i].balance || 0) < Math.abs(amount)) {
         throw new Error("Insufficient balance in " + accounts[i].name);
       }
     }
-    if (accounts[i].id === creditId) creditFound = true;
+    if (accounts[i].id === creditId) {
+      creditFound = true;
+      if (reversal && Number(accounts[i].balance || 0) < Math.abs(amount)) {
+        throw new Error("Cannot reverse transaction: insufficient balance in " + accounts[i].name);
+      }
+    }
   }
   if (!debitFound || !creditFound) throw new Error("Transaction account was not found");
 

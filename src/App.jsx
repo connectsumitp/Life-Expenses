@@ -79,7 +79,6 @@ const ENTRY_TABS = [
   { id: "expense", label: "Expenses" },
   { id: "income", label: "Income" },
   { id: "transfer", label: "Transfer" },
-  { id: "asset", label: "Assets" },
 ];
 
 const PERIOD_TABS = [
@@ -340,6 +339,33 @@ function getSavingsBurnBasis(transactions, accountId) {
     },
     0),
   );
+}
+
+function getSavingsTransferAmount(transaction) {
+  if (transaction.direction !== "transfer" || transaction.countsAsSavings !== true) return 0;
+  const amount = Number(transaction.savingsAmount ?? transaction.amount ?? 0);
+  return Number(transaction.savingsEffect || 1) < 0 ? -amount : amount;
+}
+
+function getSavingsTransferBasis(transactions, accountId) {
+  return Math.max(
+    0,
+    transactions.reduce((basis, transaction) => {
+      if (transaction.direction !== "transfer" || transaction.countsAsSavings !== true) return basis;
+      const savingsAmount = Math.abs(getSavingsTransferAmount(transaction));
+      if (Number(transaction.savingsEffect || 1) > 0 && transaction.toAccountId === accountId) return basis + savingsAmount;
+      if (Number(transaction.savingsEffect || 1) < 0 && transaction.fromAccountId === accountId) return basis - savingsAmount;
+      return basis;
+    }, 0),
+  );
+}
+
+function toAllocationTransaction(transaction) {
+  if (transaction.direction === "expense") return transaction;
+  if (transaction.direction === "transfer" && transaction.countsAsSavings === true) {
+    return { ...transaction, bucket: "Savings", category: transaction.category || "Investments", amount: getSavingsTransferAmount(transaction) };
+  }
+  return null;
 }
 
 function getBucketTotals(transactions) {
@@ -682,8 +708,6 @@ function App() {
   const [transferCountsAsSavings, setTransferCountsAsSavings] = useState(false);
   const [transferCountsTowardBurn, setTransferCountsTowardBurn] = useState(false);
   const [accounts, setAccounts] = useState(() => normalizeAccounts(useBridgeSource() ? DEFAULT_ACCOUNTS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
-  const [assetName, setAssetName] = useState("");
-  const [assetType, setAssetType] = useState("Bank");
   const [detailTab, setDetailTab] = useState("accounts");
   const [periodTab, setPeriodTab] = useState("monthly");
   const [plannerTab, setPlannerTab] = useState("insights");
@@ -887,7 +911,7 @@ function App() {
   const transferTo = accounts.find((account) => account.id === transferToAccount);
   const isTransferSavingsReversal = transferCountsAsSavings && transferFrom?.type === "Market" && transferTo?.type !== "Market";
   const transferBurnBasis = transferFrom ? getSavingsBurnBasis(transactions, transferFrom.id) : 0;
-  const activeCategory = entryMode === "income" ? incomeSource : category;
+  const activeCategory = entryMode === "income" ? "Income" : category;
   const activeBucket = categoryBuckets[category] || getBucket(category);
   const canChooseChannel = entryMode !== "expense" || Boolean(category);
   const calculatedAmount = evaluateAmountExpression(amount);
@@ -1356,6 +1380,16 @@ function App() {
   function deleteTransaction(transactionId) {
     const deletedTransaction = transactions.find((transaction) => transaction.id === transactionId);
     if (!deletedTransaction) return;
+    const reversalDebitAccountId = deletedTransaction.direction === "transfer"
+      ? deletedTransaction.toAccountId
+      : deletedTransaction.direction === "income"
+        ? deletedTransaction.accountId
+        : "";
+    const reversalDebitAccount = accounts.find((account) => account.id === reversalDebitAccountId);
+    if (reversalDebitAccount && Number(reversalDebitAccount.balance || 0) < Number(deletedTransaction.amount || 0)) {
+      setStatus(`Cannot delete: only ₹${formatMoney(reversalDebitAccount.balance)} remains in ${reversalDebitAccount.name}`);
+      return;
+    }
     const confirmed = window.confirm("Delete this journal entry?");
     if (!confirmed) return;
 
@@ -1456,8 +1490,10 @@ function App() {
       }
 
       const isSavingsReversal = transferCountsAsSavings && fromAccount.type === "Market" && toAccount.type !== "Market";
+      const availableSavingsBasis = isSavingsReversal ? getSavingsTransferBasis(transactions, fromAccount.id) : numericAmount;
       const availableBurnBasis = isSavingsReversal ? getSavingsBurnBasis(transactions, fromAccount.id) : numericAmount;
       const burnAmount = transferCountsTowardBurn ? Math.min(numericAmount, availableBurnBasis) : 0;
+      const savingsAmount = transferCountsAsSavings ? Math.min(numericAmount, availableSavingsBasis) : 0;
       const entry = {
         ...makeEntry(
           numericAmount,
@@ -1472,6 +1508,8 @@ function App() {
         countsTowardBurn: transferCountsTowardBurn,
         burnEffect: transferCountsTowardBurn && isSavingsReversal ? -1 : transferCountsTowardBurn ? 1 : 0,
         burnAmount,
+        savingsEffect: transferCountsAsSavings && isSavingsReversal ? -1 : transferCountsAsSavings ? 1 : 0,
+        savingsAmount,
         fromAccountId: fromAccount.id,
         fromAccount: fromAccount.name,
         toAccountId: toAccount.id,
@@ -1495,29 +1533,6 @@ function App() {
           setStatus(APPS_SCRIPT_URL ? "Transfer synced" : "Saved locally");
         })
         .catch(() => setStatus("Transfer saved locally, bridge failed"));
-      return;
-    }
-
-    if (entryMode === "asset") {
-      const account = addOrUpdateAsset(assetName || selectedAccountLabel, assetType, numericAmount);
-      if (!account) return;
-      setAmount("");
-      setAssetName("");
-      setBusy(true);
-      setStatus("Writing asset source...");
-      try {
-        await apiPost("updateAssetSource", {
-          account,
-          amount: numericAmount,
-          timestamp: new Date().toISOString(),
-        }, activeUserId);
-        await syncDashboard(true);
-        setStatus(APPS_SCRIPT_URL ? "Asset source synced" : "Asset saved locally");
-      } catch {
-        setStatus("Local asset save, bridge failed");
-      } finally {
-        setBusy(false);
-      }
       return;
     }
 
@@ -1713,8 +1728,7 @@ function App() {
             )}
           </label>
 
-          {entryMode !== "asset" && (
-            <div className="note-cluster">
+          <div className="note-cluster">
               <label className="entry-date-field">
                 <span>Date</span>
                 <input
@@ -1743,8 +1757,7 @@ function App() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+          </div>
 
           {entryMode === "expense" && !category && (
             <div className="category-grid fade-panel" role="radiogroup" aria-label="Expense category">
@@ -1827,46 +1840,6 @@ function App() {
             </div>
           )}
 
-          {entryMode === "income" && (
-            <div className="category-grid fade-panel" role="radiogroup" aria-label="Income source">
-              {incomeSources.map((item) => (
-                <div
-                  aria-checked={incomeSource === item}
-                  className={`category-token editable-token income-token ${incomeSource === item ? "is-active" : ""}`}
-                  key={item}
-                  onClick={() => setIncomeSource(item)}
-                  role="radio"
-                  tabIndex={0}
-                >
-                  <EditableText value={item} onCommit={(nextName) => renameIncomeSource(item, nextName)} onFocus={() => setIncomeSource(item)} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {entryMode === "asset" && (
-            <div className="asset-entry-grid">
-              <label className="mini-input">
-                <span>Asset source</span>
-                <input
-                  placeholder="SBI Account, Gold, Crypto..."
-                  value={assetName}
-                  onChange={(event) => setAssetName(event.target.value)}
-                />
-              </label>
-              <label className="mini-input">
-                <span>Type</span>
-                <select value={assetType} onChange={(event) => setAssetType(event.target.value)}>
-                  <option>Bank</option>
-                  <option>Market</option>
-                  <option>Cash</option>
-                  <option>Real Estate</option>
-                  <option>Other</option>
-                </select>
-              </label>
-            </div>
-          )}
-
           {entryMode === "transfer" && (
             <div className="transfer-panel fade-panel">
               <div className="transfer-route">
@@ -1891,16 +1864,13 @@ function App() {
               <label className="savings-transfer-toggle">
                 <input
                   checked={transferCountsAsSavings}
-                  onChange={(event) => {
-                    setTransferCountsAsSavings(event.target.checked);
-                    if (event.target.checked) setTransferCountsTowardBurn(true);
-                  }}
+                  onChange={(event) => setTransferCountsAsSavings(event.target.checked)}
                   type="checkbox"
                 />
                 <span aria-hidden="true" />
                 <div>
-                  <strong>Count as Savings</strong>
-                  <small>Include this transfer once in Savings burn and allocation.</small>
+                  <strong>Add to Savings</strong>
+                  <small>Include this movement in the Savings allocation.</small>
                 </div>
               </label>
               <label className="savings-transfer-toggle burn-transfer-toggle">
@@ -1926,7 +1896,7 @@ function App() {
             </div>
           )}
 
-          {entryMode !== "asset" && entryMode !== "transfer" && canChooseChannel && (
+          {entryMode !== "transfer" && canChooseChannel && (
             <div className="channel-panel fade-panel">
               <span className="section-label">{entryMode === "expense" ? "Paid through" : "Received into"}</span>
               <div className="account-grid" role="radiogroup" aria-label="Account or asset source">
@@ -2007,8 +1977,8 @@ function App() {
           )}
 
           <button className="submit-button" type="submit">
-            {busy ? <Loader2 className="spin" size={18} /> : entryMode === "asset" ? <Plus size={18} /> : entryMode === "transfer" ? <ArrowRightLeft size={18} /> : <Send size={18} />}
-            <span>{entryMode === "asset" ? "Save source" : entryMode === "transfer" ? "Move money" : "Log entry"}</span>
+            {busy ? <Loader2 className="spin" size={18} /> : entryMode === "transfer" ? <ArrowRightLeft size={18} /> : <Send size={18} />}
+            <span>{entryMode === "transfer" ? "Move money" : "Log entry"}</span>
           </button>
         </form>
 
@@ -3092,6 +3062,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
   const currentMonth = now.getMonth() + 1;
   const currentWeek = getWeekOfMonth(now);
   const expenseTransactions = transactions.filter(isBurnTransaction).map((transaction) => ({ ...transaction, amount: getBurnAmount(transaction) }));
+  const allocationTransactions = transactions.map(toAllocationTransaction).filter(Boolean);
   const monthlyIncomeTransactions = transactions.filter(
     (transaction) => transaction.direction === "income" && Number(transaction.monthNumber || 0) === currentMonth && Number(transaction.year || 0) === currentYear,
   );
@@ -3114,6 +3085,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     return matchesMetricPeriod(transaction);
   });
   const chartExpenseTransactions = filterVelocityTransactions(expenseTransactions, period, now);
+  const chartAllocationTransactions = filterVelocityTransactions(allocationTransactions, period, now);
   const chartIncomeTransactions = filterVelocityTransactions(
     transactions.filter((transaction) => transaction.direction === "income"),
     period,
@@ -3123,11 +3095,11 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     period === "weekly"
       ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
       : Number(budgets.monthlyTotal || 0) * (period === "yearly" ? now.getMonth() + 1 : 1);
-  const totals = getBucketTotals(metricExpenseTransactions);
-  const total = Object.values(totals).reduce((sum, value) => sum + Number(value || 0), 0);
+  const burnTotals = getBucketTotals(metricExpenseTransactions);
+  const total = Object.values(burnTotals).reduce((sum, value) => sum + Number(value || 0), 0);
   const monthlyIncome = monthlyIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const metricIncome = metricIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
-  const chartTotals = getBucketTotals(chartExpenseTransactions);
+  const chartTotals = getBucketTotals(chartAllocationTransactions);
   const chartTotal = Object.values(chartTotals).reduce((sum, value) => sum + Number(value || 0), 0);
   const chartIncome = chartIncomeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const chartAllocationBase = chartIncome || chartTotal;
@@ -3194,7 +3166,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }))
     .filter((slice) => slice.value > 0);
-  const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, accounts, period, now);
+  const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, chartAllocationTransactions, accounts, period, now);
   const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
   const monthlyBudgetSpent = categoryProgress.reduce((sum, item) => sum + item.spent, 0);
@@ -3471,14 +3443,14 @@ function getGraphDetailConfig(type, analytics) {
   return null;
 }
 
-function buildGraphDetails(expenseTransactions, metricExpenseTransactions, accounts, period, anchorDate = new Date()) {
+function buildGraphDetails(expenseTransactions, metricExpenseTransactions, allocationTransactions, accounts, period, anchorDate = new Date()) {
   const velocityLabels = buildVelocity(expenseTransactions, period, anchorDate).map((point) => point.label);
   const velocityTransactions = filterVelocityTransactions(expenseTransactions, period, anchorDate);
   return {
     velocity: buildTransactionGroups(velocityTransactions, accounts, (transaction) => getVelocityGroupLabel(transaction, period), velocityLabels),
     categories: buildTransactionGroups(metricExpenseTransactions, accounts, (transaction) => transaction.category || "Uncategorized"),
     allocations: buildTransactionGroups(
-      metricExpenseTransactions,
+      allocationTransactions,
       accounts,
       (transaction) => String(transaction.bucket || getBucket(transaction.category)),
       ["Needs", "Wants", "Savings"],

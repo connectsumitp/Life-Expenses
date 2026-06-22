@@ -42,7 +42,9 @@ var HEADERS = {
     "countsAsSavings",
     "countsTowardBurn",
     "burnEffect",
-    "burnAmount"
+    "burnAmount",
+    "savingsEffect",
+    "savingsAmount"
   ]
 };
 
@@ -641,7 +643,9 @@ function normalizeReturnedTransaction_(transaction) {
     countsAsSavings: transaction.countsAsSavings === true || String(transaction.countsAsSavings).toLowerCase() === "true",
     countsTowardBurn: transaction.countsTowardBurn === true || String(transaction.countsTowardBurn).toLowerCase() === "true",
     burnEffect: Number(transaction.burnEffect || 0),
-    burnAmount: Number(transaction.burnAmount === "" || transaction.burnAmount === undefined ? transaction.amount || 0 : transaction.burnAmount)
+    burnAmount: Number(transaction.burnAmount === "" || transaction.burnAmount === undefined ? transaction.amount || 0 : transaction.burnAmount),
+    savingsEffect: Number(transaction.savingsEffect || 0),
+    savingsAmount: Number(transaction.savingsAmount === "" || transaction.savingsAmount === undefined ? transaction.amount || 0 : transaction.savingsAmount)
   };
 }
 
@@ -674,7 +678,9 @@ function normalizeTransaction_(payload, direction) {
     countsAsSavings: payload.countsAsSavings === true || String(payload.countsAsSavings).toLowerCase() === "true",
     countsTowardBurn: payload.countsTowardBurn === true || String(payload.countsTowardBurn).toLowerCase() === "true",
     burnEffect: Number(payload.burnEffect || 0),
-    burnAmount: Number(payload.burnAmount === undefined ? payload.amount || 0 : payload.burnAmount)
+    burnAmount: Number(payload.burnAmount === undefined ? payload.amount || 0 : payload.burnAmount),
+    savingsEffect: Number(payload.savingsEffect || 0),
+    savingsAmount: Number(payload.savingsAmount === undefined ? payload.amount || 0 : payload.savingsAmount)
   };
 }
 
@@ -695,15 +701,21 @@ function mutateAccountsForTransaction_(ss, transaction, userId, multiplier) {
   var creditId = direction === "transfer" ? transaction.toAccountId : direction === "income" ? transaction.accountId : "";
   var debitFound = !debitId;
   var creditFound = !creditId;
+  var reversal = Number(multiplier || 1) < 0;
 
   for (var i = 0; i < accounts.length; i += 1) {
     if (accounts[i].id === debitId) {
       debitFound = true;
-      if (Number(multiplier || 1) > 0 && Number(accounts[i].balance || 0) < Math.abs(amount)) {
+      if (!reversal && Number(accounts[i].balance || 0) < Math.abs(amount)) {
         throw new Error("Insufficient balance in " + accounts[i].name);
       }
     }
-    if (accounts[i].id === creditId) creditFound = true;
+    if (accounts[i].id === creditId) {
+      creditFound = true;
+      if (reversal && Number(accounts[i].balance || 0) < Math.abs(amount)) {
+        throw new Error("Cannot reverse transaction: insufficient balance in " + accounts[i].name);
+      }
+    }
   }
   if (!debitFound || !creditFound) throw new Error("Transaction account was not found");
 
@@ -758,34 +770,53 @@ function inferBucket_(name) {
 }
 
 function buildMetrics_(transactions) {
-  var buckets = { Needs: 0, Wants: 0, Savings: 0, Transfer: 0 };
+  var burnBuckets = { Needs: 0, Wants: 0, Savings: 0, Transfer: 0 };
+  var allocationBuckets = { Needs: 0, Wants: 0, Savings: 0 };
+  var income = 0;
 
   for (var i = 0; i < transactions.length; i += 1) {
     var transaction = transactions[i];
+    if (transaction.direction === "income") { income += Number(transaction.amount || 0); continue; }
     var countsTowardBurn = transaction.countsTowardBurn === true || String(transaction.countsTowardBurn).toLowerCase() === "true";
-    if (transaction.direction === "income" || (transaction.direction === "transfer" && !countsTowardBurn)) continue;
-    var rawAmount = transaction.direction === "transfer" && transaction.burnAmount !== "" && transaction.burnAmount !== undefined
-      ? Number(transaction.burnAmount || 0)
-      : Number(transaction.amount || 0);
-    var amount = rawAmount * (transaction.direction === "transfer" && Number(transaction.burnEffect || 1) < 0 ? -1 : 1);
-    var bucket = transaction.bucket || "Transfer";
-    if (buckets[bucket] === undefined) buckets[bucket] = 0;
-    buckets[bucket] += amount;
+    var countsAsSavings = transaction.countsAsSavings === true || String(transaction.countsAsSavings).toLowerCase() === "true";
+    if (transaction.direction === "expense" || countsTowardBurn) {
+      var rawBurn = transaction.direction === "transfer" && transaction.burnAmount !== "" && transaction.burnAmount !== undefined ? Number(transaction.burnAmount || 0) : Number(transaction.amount || 0);
+      var burn = rawBurn * (transaction.direction === "transfer" && Number(transaction.burnEffect || 1) < 0 ? -1 : 1);
+      var burnBucket = transaction.bucket || "Transfer";
+      if (burnBuckets[burnBucket] === undefined) burnBuckets[burnBucket] = 0;
+      burnBuckets[burnBucket] += burn;
+    }
+    if (transaction.direction === "expense") {
+      var expenseBucket = transaction.bucket || inferBucket_(transaction.category);
+      if (allocationBuckets[expenseBucket] === undefined) allocationBuckets[expenseBucket] = 0;
+      allocationBuckets[expenseBucket] += Number(transaction.amount || 0);
+    } else if (transaction.direction === "transfer" && countsAsSavings) {
+      var rawSavings = transaction.savingsAmount !== "" && transaction.savingsAmount !== undefined ? Number(transaction.savingsAmount || 0) : Number(transaction.amount || 0);
+      allocationBuckets.Savings += rawSavings * (Number(transaction.savingsEffect || 1) < 0 ? -1 : 1);
+    }
   }
 
   var total = 0;
-  for (var key in buckets) {
-    if (Object.prototype.hasOwnProperty.call(buckets, key)) {
-      buckets[key] = Math.max(0, buckets[key]);
-      total += buckets[key];
+  for (var key in burnBuckets) {
+    if (Object.prototype.hasOwnProperty.call(burnBuckets, key)) {
+      burnBuckets[key] = Math.max(0, burnBuckets[key]);
+      total += burnBuckets[key];
     }
   }
-  var savings = buckets.Savings || 0;
-  var wants = buckets.Wants || 0;
+  var allocationTotal = 0;
+  for (var allocationKey in allocationBuckets) {
+    if (Object.prototype.hasOwnProperty.call(allocationBuckets, allocationKey)) {
+      allocationBuckets[allocationKey] = Math.max(0, allocationBuckets[allocationKey]);
+      allocationTotal += allocationBuckets[allocationKey];
+    }
+  }
+  var allocationBase = income || allocationTotal;
+  var savings = allocationBuckets.Savings || 0;
+  var wants = allocationBuckets.Wants || 0;
   return {
     totalBurn: total,
-    savingsRate: total ? Math.max(0, Math.round((savings / total) * 100)) : 0,
-    unplanned: Math.max(0, wants - total * 0.3)
+    savingsRate: allocationBase ? Math.max(0, Math.round((savings / allocationBase) * 100)) : 0,
+    unplanned: Math.max(0, wants - allocationBase * 0.3)
   };
 }
 

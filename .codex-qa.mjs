@@ -189,7 +189,10 @@ function stubScript() {
           let body = {};
           try { body = JSON.parse(init.body || "{}"); } catch {}
           window.__uatPosts.push(body);
-          return new Response(JSON.stringify({ ok: true, action: body.action, categories: body.categories || [], accounts: body.accounts || [] }), { status: 200, headers: { "Content-Type": "application/json" } });
+          const responseBody = { ok: true, action: body.action };
+          if (body.action === "saveAccounts") responseBody.accounts = body.accounts || [];
+          if (body.action === "saveCategories") responseBody.categories = body.categories || [];
+          return new Response(JSON.stringify(responseBody), { status: 200, headers: { "Content-Type": "application/json" } });
         }
         return nativeFetch(input, init);
       };
@@ -228,7 +231,7 @@ async function waitForPageReady(cdp) {
   const start = Date.now();
   while (Date.now() - start < 12000) {
     const ready = await evalInPage(cdp, `
-      (() => document.querySelectorAll(".entry-tab").length === 4
+      (() => document.querySelectorAll(".entry-tab").length === 3
         && document.querySelectorAll(".journal-filters select").length >= 6
         && document.querySelectorAll(".planner-tab").length === 2)()
     `);
@@ -287,7 +290,7 @@ async function scanLayout(cdp, device) {
         missing: rects.filter((rect) => rect.missing).map((rect) => rect.selector),
         hasStep1: text.includes("Step 1"),
         hasFlow: /\\bFlow\\b/i.test(text),
-        hasTabs: ["expenses", "income", "assets"].every((label) => text.toLowerCase().includes(label)),
+        hasTabs: ["expenses", "income", "transfer"].every((label) => text.toLowerCase().includes(label)),
         periodLabels: [...document.querySelectorAll(".period-tab")].map((button) => button.innerText.trim()),
         hasPlanner: ["budget", "recurring", "insights", "review"].every((label) => text.toLowerCase().includes(label)),
         hasPortfolioPulse: text.toLowerCase().includes("portfolio pulse"),
@@ -327,7 +330,7 @@ async function runInteractionTests(cdp) {
   await setNativeValue(cdp, ".user-gate input[type='password']", "wrong-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(150);
-  const alternateWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 4`);
+  const alternateWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
   record("workspace gate treats alternate private key as separate workspace", alternateWorkspaceOpens, "");
   await evalInPage(cdp, `document.querySelector(".user-chip").click()`);
   await wait(150);
@@ -335,7 +338,7 @@ async function runInteractionTests(cdp) {
   await setNativeValue(cdp, ".user-gate input[type='password']", "uat-key");
   await evalInPage(cdp, `document.querySelector(".user-gate .submit-button").click()`);
   await wait(250);
-  const correctWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 4`);
+  const correctWorkspaceOpens = await evalInPage(cdp, `!document.querySelector(".user-gate") && document.querySelectorAll(".entry-tab").length === 3`);
   record("workspace gate accepts matching email and key", correctWorkspaceOpens, "");
 
   await evalInPage(cdp, `
@@ -705,7 +708,7 @@ async function runInteractionTests(cdp) {
       sourceCount: document.querySelectorAll(".income-token").length,
     }))()
   `);
-  record("income tab shows source and account flow", incomeTab.active === "Income" && incomeTab.receivedInto && incomeTab.sourceCount >= 8, JSON.stringify(incomeTab));
+  record("income tab only shows date description and received account", incomeTab.active === "Income" && incomeTab.receivedInto && incomeTab.sourceCount === 0, JSON.stringify(incomeTab));
 
   await setNativeValue(cdp, ".amount-field input", "765");
   await evalInPage(cdp, `document.querySelector(".submit-button").click()`);
@@ -713,19 +716,66 @@ async function runInteractionTests(cdp) {
   const incomeLogged = await evalInPage(cdp, `window.__uatPosts.some((post) => post.action === "addIncome" && Number(post.amount) === 765)`);
   record("income log posts addIncome", incomeLogged, "");
 
-  await evalInPage(cdp, `[...document.querySelectorAll(".entry-tab")].find((button) => button.innerText === "Assets").click()`);
+  const entryTabs = await evalInPage(cdp, `[...document.querySelectorAll(".entry-tab")].map((button) => button.innerText)`);
+  record("assets entry tab is replaced by transfer", JSON.stringify(entryTabs) === JSON.stringify(["Expenses", "Income", "Transfer"]), JSON.stringify(entryTabs));
+
+  await evalInPage(cdp, `[...document.querySelectorAll(".entry-tab")].find((button) => button.innerText === "Transfer").click()`);
   await wait(250);
+  const independentToggles = await evalInPage(cdp, `
+    (() => {
+      const toggles = [...document.querySelectorAll(".savings-transfer-toggle input")];
+      toggles[0].click();
+      const savingsOnly = [toggles[0].checked, toggles[1].checked];
+      toggles[0].click();
+      toggles[1].click();
+      const burnOnly = [toggles[0].checked, toggles[1].checked];
+      toggles[1].click();
+      toggles[0].click();
+      return { savingsOnly, burnOnly, labels: [...document.querySelectorAll(".savings-transfer-toggle strong")].map((node) => node.innerText) };
+    })()
+  `);
+  record(
+    "transfer savings and burn toggles are independent",
+    independentToggles.savingsOnly[0] && !independentToggles.savingsOnly[1] && !independentToggles.burnOnly[0] && independentToggles.burnOnly[1] && independentToggles.labels[0] === "Add to Savings",
+    JSON.stringify(independentToggles),
+  );
+
+  const transferBefore = await evalInPage(cdp, `
+    (() => {
+      const balances = Object.fromEntries([...document.querySelectorAll(".account-row")].map((row) => [row.innerText.split("\\n")[0], Number((row.querySelector("input")?.value || "0").replace(/,/g, ""))]));
+      const burnCard = [...document.querySelectorAll(".metric-card")].find((card) => card.innerText.includes("Total Burn"));
+      return { balances, burn: burnCard?.querySelector("strong")?.innerText || "" };
+    })()
+  `);
   await setNativeValue(cdp, ".amount-field input", "999");
-  await setNativeValue(cdp, "input[placeholder='SBI Account, Gold, Crypto...']", "UAT Asset");
+  await evalInPage(cdp, `
+    (() => {
+      const selects = document.querySelectorAll(".transfer-route select");
+      selects[0].value = "sbi";
+      selects[0].dispatchEvent(new Event("change", { bubbles: true }));
+      selects[1].value = "stocks";
+      selects[1].dispatchEvent(new Event("change", { bubbles: true }));
+    })()
+  `);
   await evalInPage(cdp, `document.querySelector(".submit-button").click()`);
-  await wait(500);
-  const assetSaved = await evalInPage(cdp, `
+  await wait(250);
+  const transferSaved = await evalInPage(cdp, `
     (() => ({
-      updateAssetSource: window.__uatPosts.some((post) => post.action === "updateAssetSource" && JSON.stringify(post).includes("UAT Asset")),
-      saveAccounts: window.__uatPosts.some((post) => post.action === "saveAccounts" && JSON.stringify(post).includes("UAT Asset")),
+      post: window.__uatPosts.find((post) => post.action === "addTransfer" && Number(post.amount) === 999),
+      journal: document.querySelector(".recent-list .transaction-row")?.innerText || "",
+      burn: [...document.querySelectorAll(".metric-card")].find((card) => card.innerText.includes("Total Burn"))?.querySelector("strong")?.innerText || "",
     }))()
   `);
-  record("asset source posts and updates accounts", assetSaved.updateAssetSource && assetSaved.saveAccounts, JSON.stringify(assetSaved));
+  record(
+    "savings-only transfer moves accounts and journals without burn",
+    transferSaved.post?.fromAccountId === "sbi" && transferSaved.post?.toAccountId === "stocks" && transferSaved.post?.countsAsSavings === true && transferSaved.post?.countsTowardBurn === false && transferSaved.post?.savingsAmount === 999 && transferSaved.journal.includes("999") && transferSaved.burn === transferBefore.burn,
+    JSON.stringify(transferSaved),
+  );
+
+  await evalInPage(cdp, `document.querySelector(".recent-list .transaction-delete").click()`);
+  await wait(250);
+  const transferDeleted = await evalInPage(cdp, `window.__uatPosts.some((post) => post.action === "deleteTransaction" && post.transactionId === ${JSON.stringify(transferSaved.post?.id)})`);
+  record("deleting a transfer requests exact journal reversal", transferDeleted, String(transferDeleted));
 
   await evalInPage(cdp, `document.querySelector(".sync-button").click()`);
   await wait(250);

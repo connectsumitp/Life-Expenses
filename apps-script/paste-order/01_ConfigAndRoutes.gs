@@ -42,7 +42,9 @@ var HEADERS = {
     "countsAsSavings",
     "countsTowardBurn",
     "burnEffect",
-    "burnAmount"
+    "burnAmount",
+    "savingsEffect",
+    "savingsAmount"
   ]
 };
 
