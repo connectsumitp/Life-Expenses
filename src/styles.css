@@ -1192,11 +1192,11 @@ button:active {
 
 .period-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  flex: 1 1 320px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1 1 240px;
   gap: 5px;
-  min-width: min(310px, 100%);
-  max-width: 480px;
+  min-width: min(230px, 100%);
+  max-width: 360px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 4px;
@@ -1217,6 +1217,35 @@ button:active {
   background: #2b2d42;
   color: #fffdf4;
   box-shadow: 0 9px 20px rgba(43, 45, 66, 0.14);
+}
+
+.dashboard-month-filter {
+  display: grid;
+  flex: 0 1 190px;
+  gap: 4px;
+  min-width: min(170px, 100%);
+}
+
+.dashboard-month-filter span {
+  color: var(--muted);
+  font-family: var(--mono-font);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-month-filter select {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--ink);
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+  font-weight: 900;
 }
 
 .dashboard-header h2 {
@@ -2738,6 +2767,10 @@ button:active {
     max-width: none;
   }
 
+  .dashboard-month-filter {
+    flex: 1 1 180px;
+  }
+
   .sync-button {
     flex: 1 1 150px;
   }
@@ -2952,6 +2985,12 @@ button:active {
     width: 100%;
     min-width: 0;
     max-width: none;
+  }
+
+  .dashboard-month-filter {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
   }
 
   .period-tab {

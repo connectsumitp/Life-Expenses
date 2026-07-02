@@ -127,6 +127,8 @@ const CATEGORY_COLORS = {
   Investments: "#6F8F78",
 };
 
+const MONTH_SHORT_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 const BUCKETS = {
   needs: ["Daily Essentials", "Commuting", "Home & Utilities", "Health & Fitness"],
   wants: ["Life Enjoyment", "Personal Care", "Subscriptions"],
@@ -252,12 +254,28 @@ function getDateInputValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthInputValue(date = new Date()) {
+  const safeDate = new Date(date);
+  if (Number.isNaN(safeDate.getTime())) return getMonthInputValue(new Date());
+  return `${safeDate.getFullYear()}-${String(safeDate.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function dateFromInputValue(value) {
   if (!value) return new Date();
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return new Date();
   const now = new Date();
   return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+}
+
+function getMonthAnchorDate(value, fallbackDate = new Date()) {
+  const fallback = new Date(fallbackDate);
+  const safeFallback = Number.isNaN(fallback.getTime()) ? new Date() : fallback;
+  const [year, month] = String(value || "").split("-").map(Number);
+  if (!year || !month) return safeFallback;
+  const currentMonthValue = getMonthInputValue(safeFallback);
+  const anchorDay = value === currentMonthValue ? safeFallback.getDate() : new Date(year, month, 0).getDate();
+  return new Date(year, month - 1, anchorDay, safeFallback.getHours(), safeFallback.getMinutes(), safeFallback.getSeconds(), safeFallback.getMilliseconds());
 }
 
 const DEMO_TRANSACTIONS = [
@@ -710,6 +728,7 @@ function App() {
   const [accounts, setAccounts] = useState(() => normalizeAccounts(useBridgeSource() ? DEFAULT_ACCOUNTS : readStoredValue(getScopedStorageKey(STORAGE_KEYS.accounts, activeUserId), DEFAULT_ACCOUNTS)));
   const [detailTab, setDetailTab] = useState("accounts");
   const [periodTab, setPeriodTab] = useState("monthly");
+  const [selectedDashboardMonth, setSelectedDashboardMonth] = useState(() => getMonthInputValue());
   const [plannerTab, setPlannerTab] = useState("insights");
   const [journalCategory, setJournalCategory] = useState("all");
   const [journalMonth, setJournalMonth] = useState("all");
@@ -744,6 +763,7 @@ function App() {
   const [addingAccount, setAddingAccount] = useState(false);
   const [newAccountDraft, setNewAccountDraft] = useState("");
   const [newAccountType, setNewAccountType] = useState("Bank");
+  const dashboardMonthTouchedRef = useRef(false);
   const allocationEditRef = useRef(null);
   const allocationLastEditedRef = useRef(null);
 
@@ -880,14 +900,28 @@ function App() {
     writeStoredTransactions(activeUserId, transactions);
   }, [transactions, activeUserId]);
 
+  useEffect(() => {
+    if (dashboardMonthTouchedRef.current || !transactions.length) return;
+    const latestMonth = transactions
+      .map((transaction) => getJournalMonthValue(transaction))
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a))[0];
+    if (latestMonth) setSelectedDashboardMonth(latestMonth);
+  }, [transactions]);
+
+  const analyticsAnchorDate = useMemo(
+    () => (periodTab === "monthly" ? getMonthAnchorDate(selectedDashboardMonth) : new Date()),
+    [periodTab, selectedDashboardMonth],
+  );
   const analytics = useMemo(
-    () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets),
-    [transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets],
+    () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets, analyticsAnchorDate),
+    [transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets, analyticsAnchorDate],
   );
   const activeGraphDetail = useMemo(() => getGraphDetailConfig(graphModal, analytics), [graphModal, analytics]);
   const categoryProgressByName = Object.fromEntries(analytics.categoryProgress.map((item) => [item.name, item]));
   const incomeEntries = useMemo(() => transactions.filter((transaction) => transaction.direction === "income"), [transactions]);
   const journalOptions = useMemo(() => buildJournalOptions(transactions, expenseCategories, incomeSources), [transactions, expenseCategories, incomeSources]);
+  const dashboardMonthOptions = useMemo(() => buildDashboardMonthOptions(transactions), [transactions]);
   const filteredJournalEntries = useMemo(
     () => filterJournalEntries(transactions, {
       category: journalCategory,
@@ -2103,6 +2137,25 @@ function App() {
                 </button>
               ))}
             </div>
+            {periodTab === "monthly" && (
+              <label className="dashboard-month-filter">
+                <span>Month</span>
+                <select
+                  aria-label="Select dashboard month"
+                  value={selectedDashboardMonth}
+                  onChange={(event) => {
+                    dashboardMonthTouchedRef.current = true;
+                    setSelectedDashboardMonth(event.target.value);
+                  }}
+                >
+                  {dashboardMonthOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button className="sync-button" type="button" onClick={() => setSyncOpen(true)}>
               <RefreshCw size={17} />
               <span>Asset sync</span>
@@ -2548,7 +2601,7 @@ function App() {
             <div className="card-heading">
               <div>
                 <span className="section-label">{analytics.periodLabel} velocity</span>
-                <h3>{analytics.periodLabel} burn profile</h3>
+                <h3>{periodTab === "yearly" ? "Monthly burn history" : `${analytics.periodLabel} burn profile`}</h3>
               </div>
               <button className="chart-expand-button" onClick={() => setGraphModal("velocity")} type="button">
                 <TrendingUp size={16} />
@@ -3028,6 +3081,33 @@ function buildJournalOptions(transactions, expenseCategories, incomeSources) {
   };
 }
 
+function buildDashboardMonthOptions(transactions) {
+  const monthMap = new Map();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  MONTH_SHORT_LABELS.forEach((_, index) => {
+    const monthDate = new Date(currentYear, index, 1);
+    monthMap.set(getMonthInputValue(monthDate), monthDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }));
+  });
+
+  transactions.forEach((transaction) => {
+    const monthValue = getJournalMonthValue(transaction);
+    if (!monthValue || monthMap.has(monthValue)) return;
+    const [year, month] = monthValue.split("-").map(Number);
+    const labelDate = new Date(year, month - 1, 1);
+    monthMap.set(
+      monthValue,
+      Number.isNaN(labelDate.getTime())
+        ? transaction.monthString || monthValue
+        : labelDate.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    );
+  });
+
+  return [...monthMap.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => b.value.localeCompare(a.value));
+}
+
 function filterJournalEntries(transactions, filters) {
   const spendFilter = JOURNAL_SPEND_FILTERS.find((item) => item.id === filters.spend);
   return transactions.filter((transaction) => {
@@ -3056,8 +3136,9 @@ function normalizeMetrics(data) {
   };
 }
 
-function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, categories, budgets, recurringRules, allocationTargets = DEFAULT_ALLOCATION_TARGETS) {
-  const now = new Date();
+function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, categories, budgets, recurringRules, allocationTargets = DEFAULT_ALLOCATION_TARGETS, anchorDate = new Date()) {
+  const now = new Date(anchorDate);
+  if (Number.isNaN(now.getTime())) now.setTime(Date.now());
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const currentWeek = getWeekOfMonth(now);
@@ -3120,7 +3201,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     period === "monthly"
       ? Math.round(Number(budgets.monthlyTotal || 0) / 4)
       : period === "yearly"
-        ? Number(budgets.monthlyTotal || 0) * (now.getMonth() + 1)
+        ? Number(budgets.monthlyTotal || 0)
         : Number(budgets.monthlyTotal || 0);
   const latestBurnPoint = [...velocity].reverse().find((point) => Number(point.burn || 0) > 0) || velocity[velocity.length - 1] || { label: "Now", burn: 0 };
   const chartVariance = Number(latestBurnPoint.burn || 0) - chartTarget;
@@ -3131,7 +3212,7 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
         : period === "monthly"
           ? "The dotted line is one quarter of the monthly budget, used as a W1-W4 pacing target."
         : period === "yearly"
-          ? "The dotted line is the year-to-date budget target across months elapsed this year."
+          ? "The dotted line is the monthly budget target, repeated across the year so each month can be compared cleanly."
           : "The dotted line is the monthly budget target.",
     varianceLabel: chartVariance > 0 ? `Over ₹${formatMoney(chartVariance)}` : `Behind ₹${formatMoney(Math.abs(chartVariance))}`,
     varianceCopy:
@@ -3383,10 +3464,14 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
   }
 
   if (period === "yearly") {
-    return [currentYear - 2, currentYear - 1, currentYear].map((year) => ({
-      label: String(year),
+    return MONTH_SHORT_LABELS.map((label, index) => ({
+      label,
       burn: Object.values(getBucketTotals(expenseTransactions
-        .filter((transaction) => Number(transaction.year || 0) === year))).reduce((sum, value) => sum + value, 0),
+        .filter(
+          (transaction) =>
+            Number(transaction.year || 0) === currentYear &&
+            Number(transaction.monthNumber || 0) === index + 1,
+        ))).reduce((sum, value) => sum + value, 0),
     }));
   }
 
@@ -3407,8 +3492,8 @@ function getGraphDetailConfig(type, analytics) {
   const details = analytics.graphDetails || {};
   if (type === "velocity") {
     return {
-      eyebrow: `${analytics.periodLabel} velocity`,
-      title: `${analytics.periodLabel} burn breakdown`,
+      eyebrow: analytics.periodLabel === "Yearly" ? "Yearly monthly velocity" : `${analytics.periodLabel} velocity`,
+      title: analytics.periodLabel === "Yearly" ? "Monthly history breakdown" : `${analytics.periodLabel} burn breakdown`,
       groups: details.velocity || [],
       status: analytics.chartReadout.varianceLabel,
       targetLabel: "Target line",
@@ -3462,10 +3547,7 @@ function filterVelocityTransactions(expenseTransactions, period, anchorDate = ne
   const currentYear = anchorDate.getFullYear();
   const currentMonth = anchorDate.getMonth() + 1;
   if (period === "yearly") {
-    return expenseTransactions.filter((transaction) => {
-      const year = Number(transaction.year || 0);
-      return year >= currentYear - 2 && year <= currentYear;
-    });
+    return expenseTransactions.filter((transaction) => Number(transaction.year || 0) === currentYear);
   }
   if (period === "monthly") {
     return expenseTransactions.filter(
@@ -3478,7 +3560,10 @@ function filterVelocityTransactions(expenseTransactions, period, anchorDate = ne
 }
 
 function getVelocityGroupLabel(transaction, period) {
-  if (period === "yearly") return String(transaction.year || "Unknown");
+  if (period === "yearly") {
+    const monthIndex = Number(transaction.monthNumber || 0) - 1;
+    return MONTH_SHORT_LABELS[monthIndex] || transaction.monthString || "Unknown";
+  }
   if (period === "monthly") {
     return `W${Number(transaction.weekOfMonth || 1)}`;
   }
