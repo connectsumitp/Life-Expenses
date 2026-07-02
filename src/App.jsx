@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   Cell,
   CartesianGrid,
   Pie,
@@ -2669,7 +2671,7 @@ function App() {
             <div className="card-heading">
               <div>
                 <span className="section-label">Category spends</span>
-                <h3>Where the money went</h3>
+                <h3>{periodTab === "yearly" ? "Monthly category mix" : "Where the money went"}</h3>
               </div>
               <button className="chart-expand-button" onClick={() => setGraphModal("categories")} type="button">
                 <Banknote size={16} />
@@ -2677,6 +2679,49 @@ function App() {
                 <ChevronDown size={15} />
               </button>
             </div>
+            {periodTab === "yearly" ? (
+              <>
+                <div className="stacked-chart">
+                  {analytics.yearlyCategoryKeys.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.yearlyCategorySeries} margin={{ left: 0, right: 8, top: 12, bottom: 2 }}>
+                        <CartesianGrid stroke="#EAE7DC" strokeDasharray="4 7" vertical={false} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace", fontSize: 11 }} />
+                        <YAxis
+                          tickFormatter={(value) => (value >= 1000 ? `${Math.round(value / 1000)}k` : value)}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace", fontSize: 11 }}
+                          width={42}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "rgba(255,255,255,.9)",
+                            border: "1px solid #EAE7DC",
+                            borderRadius: 8,
+                            color: "#2B2D42",
+                          }}
+                          formatter={(value, name) => [`₹${formatMoney(value)}`, name]}
+                        />
+                        {analytics.yearlyCategoryKeys.map((name) => (
+                          <Bar dataKey={name} fill={CATEGORY_COLORS[name] || "#8D99AE"} key={name} stackId="category" radius={[4, 4, 0, 0]} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="empty-detail">No category spends found this year</div>
+                  )}
+                </div>
+                <div className="stacked-legend">
+                  {analytics.yearlyCategoryKeys.map((name) => (
+                    <span key={name} style={{ "--dot": CATEGORY_COLORS[name] || "#8D99AE" }}>
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
             <div className="pie-layout">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -2713,6 +2758,8 @@ function App() {
                 </div>
               ))}
             </div>
+              </>
+            )}
           </article>
 
           <article className="allocation-card glass">
@@ -2727,7 +2774,45 @@ function App() {
                 <ChevronDown size={15} />
               </button>
             </div>
-
+            {periodTab === "yearly" ? (
+              <>
+                <div className="stacked-chart allocation-stacked-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.yearlyAllocationSeries} margin={{ left: 0, right: 8, top: 12, bottom: 2 }}>
+                      <CartesianGrid stroke="#EAE7DC" strokeDasharray="4 7" vertical={false} />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace", fontSize: 11 }} />
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace", fontSize: 11 }}
+                        width={42}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "rgba(255,255,255,.9)",
+                          border: "1px solid #EAE7DC",
+                          borderRadius: 8,
+                          color: "#2B2D42",
+                        }}
+                        formatter={(value, name) => [`${value}%`, String(name).replace(/^\w/, (letter) => letter.toUpperCase())]}
+                      />
+                      <ReferenceLine y={allocationTargets.needs} stroke="#2B2D42" strokeDasharray="5 5" strokeOpacity={0.28} />
+                      <Bar dataKey="needs" fill="#C9B99E" stackId="allocation" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="wants" fill="#B77954" stackId="allocation" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="savings" fill="#6F8F78" stackId="allocation" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="allocation-legend yearly-allocation-legend">
+                  <AllocationLine label="Needs" target={`${allocationTargets.needs}%`} value={analytics.allocations.needs} />
+                  <AllocationLine label="Wants" target={`${allocationTargets.wants}%`} value={analytics.allocations.wants} />
+                  <AllocationLine label="Savings" target={`${allocationTargets.savings}%`} value={analytics.allocations.savings} />
+                </div>
+              </>
+            ) : (
+              <>
             <div className="allocation-bar" aria-label="Actual needs wants savings split">
               <span className="needs" style={{ width: `${analytics.allocations.needs}%` }} />
               <span className="wants" style={{ width: `${analytics.allocations.wants}%` }} />
@@ -2739,6 +2824,8 @@ function App() {
               <AllocationLine label="Wants" target={`${allocationTargets.wants}%`} value={analytics.allocations.wants} />
               <AllocationLine label="Savings" target={`${allocationTargets.savings}%`} value={analytics.allocations.savings} />
             </div>
+              </>
+            )}
 
             <div className="asset-note">
               <div className="detail-tabs" role="tablist" aria-label="Financial detail view">
@@ -3247,6 +3334,8 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
         .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0),
     }))
     .filter((slice) => slice.value > 0);
+  const yearlyCategory = buildYearlyCategorySeries(expenseTransactions, categoryNames, now);
+  const yearlyAllocationSeries = buildYearlyAllocationSeries(allocationTransactions, now);
   const graphDetails = buildGraphDetails(expenseTransactions, chartExpenseTransactions, chartAllocationTransactions, accounts, period, now);
   const monthLabel = now.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   const displayLabel = period === "yearly" ? String(now.getFullYear()) : monthLabel;
@@ -3366,6 +3455,9 @@ function buildAnalytics(transactions, accounts, assets, remoteMetrics, period, c
     trend,
     unplanned,
     velocity,
+    yearlyAllocationSeries,
+    yearlyCategoryKeys: yearlyCategory.keys,
+    yearlyCategorySeries: yearlyCategory.series,
   };
 }
 
@@ -3485,6 +3577,69 @@ function buildVelocity(expenseTransactions, period, anchorDate = new Date()) {
           Number(transaction.weekOfMonth || 1) === week,
       ))).reduce((sum, value) => sum + value, 0),
   }));
+}
+
+function buildYearlyCategorySeries(expenseTransactions, categories, anchorDate = new Date()) {
+  const currentYear = anchorDate.getFullYear();
+  const categoryKeys = [...new Set([...categories, ...expenseTransactions.map((transaction) => transaction.category).filter(Boolean)])];
+  const series = MONTH_SHORT_LABELS.map((label, index) => {
+    const row = { label, monthNumber: index + 1 };
+    categoryKeys.forEach((categoryName) => {
+      row[categoryName] = 0;
+    });
+    return row;
+  });
+
+  expenseTransactions
+    .filter((transaction) => Number(transaction.year || 0) === currentYear)
+    .forEach((transaction) => {
+      const monthIndex = Number(transaction.monthNumber || 0) - 1;
+      if (monthIndex < 0 || monthIndex >= series.length) return;
+      const categoryName = transaction.category || "Uncategorized";
+      if (series[monthIndex][categoryName] === undefined) series[monthIndex][categoryName] = 0;
+      series[monthIndex][categoryName] += Number(transaction.amount || 0);
+    });
+
+  const activeKeys = categoryKeys.filter((categoryName) => series.some((row) => Number(row[categoryName] || 0) > 0));
+  return {
+    keys: activeKeys,
+    series,
+  };
+}
+
+function buildYearlyAllocationSeries(allocationTransactions, anchorDate = new Date()) {
+  const currentYear = anchorDate.getFullYear();
+  const series = MONTH_SHORT_LABELS.map((label, index) => ({
+    label,
+    monthNumber: index + 1,
+    needs: 0,
+    wants: 0,
+    savings: 0,
+    needsAmount: 0,
+    wantsAmount: 0,
+    savingsAmount: 0,
+  }));
+
+  allocationTransactions
+    .filter((transaction) => Number(transaction.year || 0) === currentYear)
+    .forEach((transaction) => {
+      const monthIndex = Number(transaction.monthNumber || 0) - 1;
+      if (monthIndex < 0 || monthIndex >= series.length) return;
+      const bucket = String(transaction.bucket || getBucket(transaction.category)).toLowerCase();
+      if (!["needs", "wants", "savings"].includes(bucket)) return;
+      series[monthIndex][`${bucket}Amount`] += Number(transaction.amount || 0);
+    });
+
+  return series.map((row) => {
+    const total = row.needsAmount + row.wantsAmount + row.savingsAmount;
+    if (!total) return row;
+    return {
+      ...row,
+      needs: Math.round((row.needsAmount / total) * 100),
+      wants: Math.round((row.wantsAmount / total) * 100),
+      savings: Math.max(0, 100 - Math.round((row.needsAmount / total) * 100) - Math.round((row.wantsAmount / total) * 100)),
+    };
+  });
 }
 
 function getGraphDetailConfig(type, analytics) {

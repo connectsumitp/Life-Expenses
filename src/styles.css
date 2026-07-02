@@ -2057,7 +2057,9 @@ button:active {
 .pie-card,
 .allocation-card {
   display: grid;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   padding: clamp(12px, 1.6vw, 18px);
 }
 
@@ -2142,6 +2144,53 @@ button:active {
   min-height: 180px;
 }
 
+.stacked-chart {
+  width: 100%;
+  min-width: 0;
+  min-height: 220px;
+  overflow: hidden;
+}
+
+.allocation-stacked-chart {
+  min-height: 190px;
+}
+
+.stacked-legend {
+  display: flex;
+  max-height: 92px;
+  flex-wrap: wrap;
+  gap: 7px;
+  overflow: auto;
+}
+
+.stacked-legend span {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(43, 45, 66, 0.1);
+  border-radius: 999px;
+  padding: 6px 8px;
+  background: rgba(253, 252, 240, 0.66);
+  color: var(--muted);
+  font-family: var(--mono-font);
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+.stacked-legend span::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--dot);
+}
+
+.yearly-allocation-legend {
+  grid-template-columns: 1fr;
+}
+
 .chart-diagnostics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2208,9 +2257,16 @@ button:active {
 .card-heading,
 .sheet-header {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 14px;
+}
+
+.card-heading > div,
+.sheet-header > div {
+  min-width: 0;
 }
 
 .card-heading h3,
@@ -2218,6 +2274,7 @@ button:active {
   max-width: none;
   margin-top: 4px;
   font-size: clamp(1.2rem, 2vw, 1.85rem);
+  overflow-wrap: anywhere;
 }
 
 .allocation-bar {
@@ -3307,6 +3364,15 @@ button:active {
 
   .pie-card {
     grid-template-rows: auto 180px auto;
+  }
+
+  .stacked-chart,
+  .allocation-stacked-chart {
+    min-height: 210px;
+  }
+
+  .stacked-legend {
+    max-height: 78px;
   }
 
   .chart-card {
