@@ -6,6 +6,8 @@ import {
   BarChart,
   Cell,
   CartesianGrid,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ReferenceLine,
@@ -3064,7 +3066,97 @@ function App() {
               </div>
             </div>
 
-            <div className="graph-detail-list no-scrollbar">
+            {activeGraphDetail.chartMode === "yearlyCategories" ? (
+              <div className="graph-trend-panel">
+                <div className="graph-trend-chart">
+                  {activeGraphDetail.keys.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={activeGraphDetail.data} margin={{ left: 0, right: 8, top: 14, bottom: 2 }}>
+                        <CartesianGrid stroke="#EAE7DC" strokeDasharray="4 7" vertical={false} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }} />
+                        <YAxis
+                          tickFormatter={(value) => (value >= 1000 ? `${Math.round(value / 1000)}k` : value)}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }}
+                          width={54}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "rgba(255,255,255,.9)",
+                            border: "1px solid #EAE7DC",
+                            borderRadius: 8,
+                            color: "#2B2D42",
+                          }}
+                          formatter={(value, name) => [`₹${formatMoney(value)}`, name]}
+                        />
+                        {activeGraphDetail.keys.map((name) => (
+                          <Area
+                            dataKey={name}
+                            fill={CATEGORY_COLORS[name] || "#8D99AE"}
+                            fillOpacity={0.32}
+                            key={name}
+                            stackId="categoryTrend"
+                            stroke={CATEGORY_COLORS[name] || "#8D99AE"}
+                            strokeWidth={2}
+                            type="monotone"
+                          />
+                        ))}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="empty-detail">No category spends found this year</div>
+                  )}
+                </div>
+                <div className="stacked-legend graph-trend-legend">
+                  {activeGraphDetail.keys.map((name) => (
+                    <span key={name} style={{ "--dot": CATEGORY_COLORS[name] || "#8D99AE" }}>
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : activeGraphDetail.chartMode === "yearlyAllocations" ? (
+              <div className="graph-trend-panel">
+                <div className="graph-trend-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={activeGraphDetail.data} margin={{ left: 0, right: 12, top: 14, bottom: 2 }}>
+                      <CartesianGrid stroke="#EAE7DC" strokeDasharray="4 7" vertical={false} />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }} />
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={(value) => `${value}%`}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: "#2B2D42", fontFamily: "JetBrains Mono, Fira Code, ui-monospace" }}
+                        width={54}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "rgba(255,255,255,.9)",
+                          border: "1px solid #EAE7DC",
+                          borderRadius: 8,
+                          color: "#2B2D42",
+                        }}
+                        formatter={(value, name) => [`${value}%`, String(name).replace(/^\w/, (letter) => letter.toUpperCase())]}
+                      />
+                      <ReferenceLine y={analytics.allocationTargets.needs} stroke="#C9B99E" strokeDasharray="5 5" strokeOpacity={0.44} />
+                      <ReferenceLine y={analytics.allocationTargets.wants} stroke="#B77954" strokeDasharray="5 5" strokeOpacity={0.44} />
+                      <ReferenceLine y={analytics.allocationTargets.savings} stroke="#6F8F78" strokeDasharray="5 5" strokeOpacity={0.44} />
+                      <Line dataKey="needs" dot={{ r: 3 }} stroke="#C9B99E" strokeWidth={3} type="monotone" />
+                      <Line dataKey="wants" dot={{ r: 3 }} stroke="#B77954" strokeWidth={3} type="monotone" />
+                      <Line dataKey="savings" dot={{ r: 3 }} stroke="#6F8F78" strokeWidth={3} type="monotone" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="stacked-legend graph-trend-legend">
+                  <span style={{ "--dot": "#C9B99E" }}>Needs target {analytics.allocationTargets.needs}%</span>
+                  <span style={{ "--dot": "#B77954" }}>Wants target {analytics.allocationTargets.wants}%</span>
+                  <span style={{ "--dot": "#6F8F78" }}>Savings target {analytics.allocationTargets.savings}%</span>
+                </div>
+              </div>
+            ) : (
+              <div className="graph-detail-list no-scrollbar">
               {activeGraphDetail.groups.length ? (
                 activeGraphDetail.groups.map((group) => (
                   <article className="graph-detail-group" key={group.name}>
@@ -3104,6 +3196,7 @@ function App() {
                 <div className="empty-detail">No spends found for this view</div>
               )}
             </div>
+            )}
           </section>
         </div>
       )}
@@ -3658,6 +3751,23 @@ function getGraphDetailConfig(type, analytics) {
   }
   if (type === "categories") {
     const groups = details.categories || [];
+    if (analytics.periodLabel === "Yearly") {
+      const total = (analytics.yearlyCategorySeries || []).reduce(
+        (sum, row) => sum + (analytics.yearlyCategoryKeys || []).reduce((monthSum, key) => monthSum + Number(row[key] || 0), 0),
+        0,
+      );
+      return {
+        chartMode: "yearlyCategories",
+        data: analytics.yearlyCategorySeries || [],
+        eyebrow: "Category spends",
+        keys: analytics.yearlyCategoryKeys || [],
+        status: `${(analytics.yearlyCategoryKeys || []).length} active categories`,
+        targetLabel: "View",
+        targetValue: "Month by month",
+        title: "Category trend by month",
+        total,
+      };
+    }
     return {
       eyebrow: "Category spends",
       title: "Spend details by category",
@@ -3670,6 +3780,22 @@ function getGraphDetailConfig(type, analytics) {
   }
   if (type === "allocations") {
     const groups = details.allocations || [];
+    if (analytics.periodLabel === "Yearly") {
+      const total = (analytics.yearlyAllocationSeries || []).reduce(
+        (sum, row) => sum + Number(row.needsAmount || 0) + Number(row.wantsAmount || 0) + Number(row.savingsAmount || 0),
+        0,
+      );
+      return {
+        chartMode: "yearlyAllocations",
+        data: analytics.yearlyAllocationSeries || [],
+        eyebrow: "Needs / Wants / Savings",
+        status: `${analytics.allocations.needs}/${analytics.allocations.wants}/${analytics.allocations.savings}%`,
+        targetLabel: "Target split",
+        targetValue: `${analytics.allocationTargets.needs}/${analytics.allocationTargets.wants}/${analytics.allocationTargets.savings}%`,
+        title: "Allocation trend by month",
+        total,
+      };
+    }
     return {
       eyebrow: "Needs / Wants / Savings",
       title: "Allocation detail",

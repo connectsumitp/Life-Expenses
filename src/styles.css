@@ -2604,6 +2604,23 @@ button:active {
   padding-right: 2px;
 }
 
+.graph-trend-panel {
+  display: grid;
+  min-height: 0;
+  gap: 12px;
+}
+
+.graph-trend-chart {
+  min-height: min(420px, 48vh);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.graph-trend-legend {
+  max-height: 118px;
+  padding-right: 2px;
+}
+
 .graph-detail-group {
   display: grid;
   gap: 9px;
