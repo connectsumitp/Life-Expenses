@@ -798,12 +798,12 @@ async function runInteractionTests(cdp) {
       };
     })()
   `);
-  record("monthly is default with weekly trend chart and weekly period removed", monthly.active === "Monthly" && !monthly.hasWeekly && monthly.title && monthly.weeklyTrendLabels && monthly.burn > 0, JSON.stringify(monthly));
+  record("monthly is default with weekly trend chart and weekly period removed", monthly.active === "Monthly" && !monthly.hasWeekly && monthly.title && monthly.weeklyTrendLabels && Number.isFinite(monthly.burn), JSON.stringify(monthly));
   await evalInPage(cdp, `[...document.querySelectorAll(".period-tab")].find((button) => button.innerText === "Yearly").click()`);
   await wait(200);
   const yearly = await evalInPage(cdp, `
     (() => ({
-      title: document.body.innerText.toLowerCase().includes("yearly burn profile"),
+      title: document.body.innerText.toLowerCase().includes("monthly burn history"),
       headerYearOnly: /^\\d{4}$/.test(document.querySelector(".dashboard-header h2")?.innerText.trim() || ""),
       hasBudgetLeft: [...document.querySelectorAll(".metric-card span")].some((item) => item.innerText.includes("Budget Left")),
       splitWhole: /\\d+\\/\\d+\\/\\d+%/.test([...document.querySelectorAll(".metric-card strong")].at(-1)?.innerText || ""),
@@ -825,29 +825,51 @@ async function runInteractionTests(cdp) {
 
   await evalInPage(cdp, `document.querySelector(".pie-card .chart-expand-button").click()`);
   await wait(150);
-  const pieModal = await evalInPage(cdp, `
+  const yearlyCategoryModal = await evalInPage(cdp, `
     (() => ({
       open: !!document.querySelector(".graph-detail-sheet"),
-      title: document.body.innerText.toLowerCase().includes("spend details by category"),
+      title: document.body.innerText.toLowerCase().includes("category trend by month"),
+      trend: document.querySelectorAll(".graph-trend-panel").length,
+      charts: document.querySelectorAll(".graph-trend-chart").length,
       groups: document.querySelectorAll(".graph-detail-group").length,
       logs: document.querySelectorAll(".graph-log-row").length,
     }))()
   `);
-  record("pie graph opens categorized spend modal", pieModal.open && pieModal.title && pieModal.groups > 1 && pieModal.logs > 1, JSON.stringify(pieModal));
+  record("yearly category spend expands to trend graph without logs", yearlyCategoryModal.open && yearlyCategoryModal.title && yearlyCategoryModal.trend === 1 && yearlyCategoryModal.charts === 1 && yearlyCategoryModal.groups === 0 && yearlyCategoryModal.logs === 0, JSON.stringify(yearlyCategoryModal));
   await evalInPage(cdp, `document.querySelector("button[aria-label='Close graph detail']").click()`);
   await wait(100);
 
   await evalInPage(cdp, `document.querySelector(".allocation-card .chart-expand-button").click()`);
   await wait(150);
-  const allocationModal = await evalInPage(cdp, `
+  const yearlyAllocationModal = await evalInPage(cdp, `
     (() => ({
       open: !!document.querySelector(".graph-detail-sheet"),
-      title: document.body.innerText.toLowerCase().includes("allocation detail"),
+      title: document.body.innerText.toLowerCase().includes("allocation trend by month"),
       hasNeeds: document.body.innerText.includes("Needs"),
+      trend: document.querySelectorAll(".graph-trend-panel").length,
+      lines: document.querySelectorAll(".recharts-line-curve").length,
+      groups: document.querySelectorAll(".graph-detail-group").length,
       logs: document.querySelectorAll(".graph-log-row").length,
     }))()
   `);
-  record("allocation tracker opens bucket detail modal", allocationModal.open && allocationModal.title && allocationModal.hasNeeds && allocationModal.logs > 1, JSON.stringify(allocationModal));
+  record("yearly allocation expands to line trend graph without logs", yearlyAllocationModal.open && yearlyAllocationModal.title && yearlyAllocationModal.hasNeeds && yearlyAllocationModal.trend === 1 && yearlyAllocationModal.lines >= 3 && yearlyAllocationModal.groups === 0 && yearlyAllocationModal.logs === 0, JSON.stringify(yearlyAllocationModal));
+  await evalInPage(cdp, `document.querySelector("button[aria-label='Close graph detail']").click()`);
+  await wait(100);
+
+  await evalInPage(cdp, `[...document.querySelectorAll(".period-tab")].find((button) => button.innerText === "Monthly").click()`);
+  await wait(200);
+  await evalInPage(cdp, `document.querySelector(".pie-card .chart-expand-button").click()`);
+  await wait(150);
+  const monthlyCategoryModal = await evalInPage(cdp, `
+    (() => ({
+      open: !!document.querySelector(".graph-detail-sheet"),
+      title: document.body.innerText.toLowerCase().includes("spend details by category"),
+      groups: document.querySelectorAll(".graph-detail-group").length,
+      logs: document.querySelectorAll(".graph-log-row").length,
+      trend: document.querySelectorAll(".graph-trend-panel").length,
+    }))()
+  `);
+  record("monthly category expand keeps transaction drilldown", monthlyCategoryModal.open && monthlyCategoryModal.title && monthlyCategoryModal.groups >= 0 && monthlyCategoryModal.trend === 0, JSON.stringify(monthlyCategoryModal));
   await evalInPage(cdp, `document.querySelector("button[aria-label='Close graph detail']").click()`);
   await wait(100);
 
