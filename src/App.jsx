@@ -921,7 +921,7 @@ function App() {
     () => buildAnalytics(transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets, analyticsAnchorDate),
     [transactions, accounts, assets, remoteMetrics, periodTab, expenseCategories, budgets, recurringRules, allocationTargets, analyticsAnchorDate],
   );
-  const activeGraphDetail = useMemo(() => getGraphDetailConfig(graphModal, analytics), [graphModal, analytics]);
+  const activeGraphDetail = useMemo(() => getGraphDetailConfig(graphModal, analytics, periodTab), [graphModal, analytics, periodTab]);
   const categoryProgressByName = Object.fromEntries(analytics.categoryProgress.map((item) => [item.name, item]));
   const incomeEntries = useMemo(() => transactions.filter((transaction) => transaction.direction === "income"), [transactions]);
   const journalOptions = useMemo(() => buildJournalOptions(transactions, expenseCategories, incomeSources), [transactions, expenseCategories, incomeSources]);
@@ -3735,13 +3735,14 @@ function buildYearlyAllocationSeries(allocationTransactions, anchorDate = new Da
   });
 }
 
-function getGraphDetailConfig(type, analytics) {
+function getGraphDetailConfig(type, analytics, period = "monthly") {
   if (!type) return null;
   const details = analytics.graphDetails || {};
+  const isYearly = period === "yearly";
   if (type === "velocity") {
     return {
-      eyebrow: analytics.periodLabel === "Yearly" ? "Yearly monthly velocity" : `${analytics.periodLabel} velocity`,
-      title: analytics.periodLabel === "Yearly" ? "Monthly history breakdown" : `${analytics.periodLabel} burn breakdown`,
+      eyebrow: isYearly ? "Yearly monthly velocity" : `${analytics.periodLabel} velocity`,
+      title: isYearly ? "Monthly history breakdown" : `${analytics.periodLabel} burn breakdown`,
       groups: details.velocity || [],
       status: analytics.chartReadout.varianceLabel,
       targetLabel: "Target line",
@@ -3751,7 +3752,7 @@ function getGraphDetailConfig(type, analytics) {
   }
   if (type === "categories") {
     const groups = details.categories || [];
-    if (analytics.periodLabel === "Yearly") {
+    if (isYearly) {
       const total = (analytics.yearlyCategorySeries || []).reduce(
         (sum, row) => sum + (analytics.yearlyCategoryKeys || []).reduce((monthSum, key) => monthSum + Number(row[key] || 0), 0),
         0,
@@ -3780,7 +3781,7 @@ function getGraphDetailConfig(type, analytics) {
   }
   if (type === "allocations") {
     const groups = details.allocations || [];
-    if (analytics.periodLabel === "Yearly") {
+    if (isYearly) {
       const total = (analytics.yearlyAllocationSeries || []).reduce(
         (sum, row) => sum + Number(row.needsAmount || 0) + Number(row.wantsAmount || 0) + Number(row.savingsAmount || 0),
         0,
